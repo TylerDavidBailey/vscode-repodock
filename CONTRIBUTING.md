@@ -11,6 +11,9 @@ make watch       # esbuild in watch mode
 
 Press `F5` in VS Code to launch an Extension Development Host with the extension loaded.
 
+To test a packaged build instead, `make install-local` produces a `.vsix` and installs it
+into VS Code (`make uninstall-local` removes it). `make help` lists all targets.
+
 ## Before you open a PR
 
 ```sh
