@@ -5,23 +5,36 @@
 
 Add folders, discover every git repository inside them, and switch between repos without leaving VS Code.
 
-RepoDock scans the directories you choose (recursively, nested repos included), lists everything in a native sidebar with live git status, and gets you into any repo in a couple of keystrokes.
+RepoDock scans the folders you choose, lists every repo in a native sidebar with live git status, and gets you into any of them in a couple of keystrokes.
 
 ![RepoDock sidebar](docs/screenshot.png)
 
+## Contents
+
+- [Features](#features)
+- [Getting started](#getting-started)
+- [Commands](#commands)
+- [Settings](#settings)
+- [Install locally](#install-locally)
+- [Development](#development)
+- [Support](#support)
+- [License](#license)
+
 ## Features
 
-- **Recursive discovery** — point RepoDock at `~/Developer/repos` (or several folders) and it finds every git repository inside, including repos nested in subfolders and repos inside other repos (submodules, vendored checkouts).
-- **Native sidebar** — a real VS Code tree in the Activity Bar, one row per repo. Repos in subfolders (or inside another repo) show their folder in parentheses (`ginkgo (abc)`), so nothing hides behind extra folder levels and same-named repos stay distinguishable.
-- **Git state at a glance** — every repo row shows its branch and when you last opened it; the tooltip has the full picture (changes, untracked, ahead/behind). Status reloads automatically whenever the window regains focus.
-- **Pin and hide** — pin your daily drivers to the top of the list (they get a pin icon), and hide repos you never open.
-- **You are here** — the repo open in the current window is highlighted, tinted, and auto-revealed when the view opens, so you always know where you are.
-- **Sort your way** — one flat list, ordered by most recently opened (with compact `2h`-style timestamps) or alphabetically. Toggle from the view title bar.
-- **Group by folder** — scanning more than one folder? Toggle the title-bar group button to give each folder its own collapsible section (a repo found under two overlapping folders appears once, in the more specific one).
-- **Type-to-find** — focus the tree and just type; VS Code's built-in tree filtering works out of the box.
-- **Private by design** — no network requests, no telemetry, zero runtime dependencies. Folder paths and last-opened timestamps never leave VS Code's local storage.
+- **Recursive discovery** — finds every git repo inside the folders you add, including nested repos and repos inside other repos (submodules, vendored checkouts).
+- **Native sidebar** — a real VS Code tree in the Activity Bar, one row per repo. Nested repos show their parent folder in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
+- **Git state at a glance** — each row shows its branch and when you last opened it; the tooltip adds changes, untracked, and ahead/behind. Refreshes when the window regains focus.
+- **Pin and hide** — pin daily drivers to the top; hide repos you never open.
+- **You are here** — the repo open in the current window is highlighted and auto-revealed.
+- **Sort your way** — order by most recently opened (compact `2h` timestamps) or alphabetically, from the title bar.
+- **Group by folder** — give each scanned folder its own collapsible section; a repo under two overlapping folders appears once, in the more specific one.
+- **Type-to-find** — focus the tree and type to filter.
+- **Private by design** — no network, no telemetry, zero runtime dependencies; paths and timestamps stay in VS Code's local storage.
 
 ## Getting started
+
+Requires VS Code 1.96 or newer.
 
 1. Open the RepoDock icon in the Activity Bar.
 2. Click **Add Folder** and pick the directory (or directories) where your repos live.
@@ -61,7 +74,7 @@ Until RepoDock is on the Marketplace, install it from a packaged `.vsix`:
 make install-local   # packages and runs `code --install-extension repodock-<version>.vsix`
 ```
 
-Or manually: `npm run package`, then in VS Code run **Extensions: Install from VSIX…** and pick the file. `make uninstall-local` removes it again. To try changes without installing, open this repo in VS Code and press `F5` — it launches an Extension Development Host with RepoDock loaded.
+Or manually: `npm run package`, then run **Extensions: Install from VSIX…** and pick the file (`make uninstall-local` removes it). To try changes without installing, open this repo and press `F5` for an Extension Development Host with RepoDock loaded.
 
 ## Development
 
@@ -76,9 +89,13 @@ make lint            # eslint + prettier
 make package         # produce a .vsix
 ```
 
-The `src/core` layer has no dependency on the `vscode` module, so scanning, git parsing, and grouping logic are all unit-testable; `src/ext` wires that core into the VS Code API.
+`src/core` has no dependency on the `vscode` module — scanning, git parsing, and grouping are all unit-testable; `src/ext` wires that core into the VS Code API.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow (conventional commits are required — releases are generated from them) and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
+
+## Support
+
+Found a bug or have a feature idea? [Open an issue](https://github.com/TylerDavidBailey/vscode-repodock/issues). For security concerns, follow the process in [SECURITY.md](SECURITY.md) rather than filing a public issue.
 
 ## License
 
