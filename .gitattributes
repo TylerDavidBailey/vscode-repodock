@@ -1,0 +1,5 @@
+# Normalize line endings to LF everywhere (matters for Windows contributors;
+# prettier and the test snapshots assume LF)
+* text=auto eol=lf
+
+*.png binary

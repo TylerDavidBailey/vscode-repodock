@@ -1,0 +1,429 @@
+{
+  "name": "repodock",
+  "displayName": "RepoDock",
+  "description": "Add folders, discover every git repository inside them, and switch between repos without leaving VS Code.",
+  "version": "1.0.0",
+  "publisher": "tylerdavidbailey",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TylerDavidBailey/vscode-repodock.git"
+  },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "repository",
+    "project",
+    "switcher",
+    "workspace",
+    "project manager"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "RepoDock scans the local file system for git repositories."
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Folder locations and exclude patterns from workspace settings are ignored in Restricted Mode.",
+      "restrictedConfigurations": [
+        "repodock.directories",
+        "repodock.exclude"
+      ]
+    }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "repodock",
+          "title": "RepoDock",
+          "icon": "media/repodock.svg"
+        }
+      ]
+    },
+    "views": {
+      "repodock": [
+        {
+          "id": "repodock.repos",
+          "name": "Repositories",
+          "icon": "media/repodock.svg",
+          "contextualTitle": "RepoDock"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "repodock.repos",
+        "contents": "Add a folder and RepoDock will find every git repository inside it.\n[Add Folder](command:repodock.addFolder)",
+        "when": "repodock.noDirectories"
+      },
+      {
+        "view": "repodock.repos",
+        "contents": "No git repositories found in the folders you added.\n[Add Another Folder](command:repodock.addFolder)\nIf repositories are missing, check the repodock.maxDepth and repodock.exclude settings.",
+        "when": "!repodock.noDirectories && !repodock.scanning"
+      }
+    ],
+    "commands": [
+      {
+        "command": "repodock.manageFolders",
+        "title": "Manage Folders",
+        "category": "RepoDock",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "repodock.addFolder",
+        "title": "Add Folder",
+        "category": "RepoDock",
+        "icon": "$(add)"
+      },
+      {
+        "command": "repodock.removeFolder",
+        "title": "Remove Folder",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.refresh",
+        "title": "Refresh",
+        "category": "RepoDock",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "repodock.sortAlphabetically",
+        "title": "Sort Alphabetically",
+        "category": "RepoDock",
+        "icon": "$(symbol-text)"
+      },
+      {
+        "command": "repodock.sortByRecent",
+        "title": "Sort by Recently Opened",
+        "category": "RepoDock",
+        "icon": "$(history)"
+      },
+      {
+        "command": "repodock.groupByFolder",
+        "title": "Group by Folder",
+        "category": "RepoDock",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "repodock.showFlatList",
+        "title": "Show Flat List",
+        "category": "RepoDock",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "repodock.open",
+        "title": "Open Repository",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.openInCurrentWindow",
+        "title": "Open in Current Window",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.openInNewWindow",
+        "title": "Open in New Window",
+        "category": "RepoDock",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "repodock.pinRepo",
+        "title": "Pin Repository",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.unpinRepo",
+        "title": "Unpin Repository",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.openInTerminal",
+        "title": "Open in Integrated Terminal",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.addToWorkspace",
+        "title": "Add to Workspace",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.revealInFinder",
+        "title": "Reveal in Finder",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.revealInFileExplorer",
+        "title": "Reveal in File Explorer",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.copyPath",
+        "title": "Copy Path",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.hideRepo",
+        "title": "Hide Repository",
+        "category": "RepoDock"
+      },
+      {
+        "command": "repodock.unhideAll",
+        "title": "Unhide All Repositories",
+        "category": "RepoDock"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "repodock.open",
+          "when": "false"
+        },
+        {
+          "command": "repodock.openInCurrentWindow",
+          "when": "false"
+        },
+        {
+          "command": "repodock.openInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "repodock.pinRepo",
+          "when": "false"
+        },
+        {
+          "command": "repodock.unpinRepo",
+          "when": "false"
+        },
+        {
+          "command": "repodock.openInTerminal",
+          "when": "false"
+        },
+        {
+          "command": "repodock.addToWorkspace",
+          "when": "false"
+        },
+        {
+          "command": "repodock.revealInFinder",
+          "when": "false"
+        },
+        {
+          "command": "repodock.revealInFileExplorer",
+          "when": "false"
+        },
+        {
+          "command": "repodock.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "repodock.hideRepo",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "repodock.groupByFolder",
+          "when": "view == repodock.repos && repodock.multipleFolders && !repodock.groupByFolder",
+          "group": "navigation@2"
+        },
+        {
+          "command": "repodock.showFlatList",
+          "when": "view == repodock.repos && repodock.multipleFolders && repodock.groupByFolder",
+          "group": "navigation@2"
+        },
+        {
+          "command": "repodock.sortAlphabetically",
+          "when": "view == repodock.repos && repodock.sortOrder == recent",
+          "group": "navigation@3"
+        },
+        {
+          "command": "repodock.sortByRecent",
+          "when": "view == repodock.repos && repodock.sortOrder == alphabetical",
+          "group": "navigation@3"
+        },
+        {
+          "command": "repodock.refresh",
+          "when": "view == repodock.repos",
+          "group": "navigation@4"
+        },
+        {
+          "command": "repodock.manageFolders",
+          "when": "view == repodock.repos",
+          "group": "navigation@5"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "repodock.openInNewWindow",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "inline@1"
+        },
+        {
+          "command": "repodock.pinRepo",
+          "when": "view == repodock.repos && viewItem =~ /^repo(Nested)?$/",
+          "group": "0_pin@1"
+        },
+        {
+          "command": "repodock.unpinRepo",
+          "when": "view == repodock.repos && viewItem =~ /-pinned$/",
+          "group": "0_pin@1"
+        },
+        {
+          "command": "repodock.openInCurrentWindow",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "repodock.openInNewWindow",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "repodock.addToWorkspace",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "repodock.openInTerminal",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "2_os@0"
+        },
+        {
+          "command": "repodock.revealInFinder",
+          "when": "view == repodock.repos && viewItem =~ /^repo/ && isMac",
+          "group": "2_os@1"
+        },
+        {
+          "command": "repodock.revealInFileExplorer",
+          "when": "view == repodock.repos && viewItem =~ /^repo/ && !isMac",
+          "group": "2_os@1"
+        },
+        {
+          "command": "repodock.copyPath",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "2_os@2"
+        },
+        {
+          "command": "repodock.hideRepo",
+          "when": "view == repodock.repos && viewItem =~ /^repo/",
+          "group": "3_manage@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "RepoDock",
+      "properties": {
+        "repodock.directories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Folders to scan for git repositories. Supports ~ for the home directory."
+        },
+        "repodock.maxDepth": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "How many directory levels below each folder to scan for repositories."
+        },
+        "repodock.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "node_modules",
+            "bower_components",
+            ".Trash"
+          ],
+          "description": "Directory names skipped while scanning."
+        },
+        "repodock.hiddenRepos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Repositories hidden from the view (absolute paths, ~ supported). Add entries with the Hide Repository context menu; clear with the Unhide All Repositories command."
+        },
+        "repodock.showNestedRepos": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show repositories found inside another repository (submodules, vendored checkouts) nested under their parent."
+        },
+        "repodock.sortOrder": {
+          "type": "string",
+          "enum": [
+            "recent",
+            "alphabetical"
+          ],
+          "enumDescriptions": [
+            "Most recently opened first.",
+            "By repository name."
+          ],
+          "default": "recent",
+          "description": "How the Repositories view sorts repositories. Pinned repos always come first."
+        },
+        "repodock.groupByFolder": {
+          "type": "boolean",
+          "default": false,
+          "description": "Group the Repositories view into one section per configured folder. With a single folder configured the list stays flat."
+        },
+        "repodock.openInNewWindow": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open repositories in a new window when clicked in the tree."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build:prod",
+    "build": "node esbuild.mjs",
+    "build:prod": "node esbuild.mjs --production",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test:unit": "vitest run",
+    "compile:tests": "tsc -p tsconfig.test.json",
+    "test:integration": "npm run build && npm run compile:tests && vscode-test",
+    "test": "npm run test:unit && npm run test:integration",
+    "make-icon": "node scripts/make-icon.mjs",
+    "package": "vsce package"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.5",
+    "diff": "^8.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.1.1",
+    "@types/vscode": "~1.96.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "mocha": "^11.7.6",
+    "prettier": "^3.9.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.1.10"
+  }
+}

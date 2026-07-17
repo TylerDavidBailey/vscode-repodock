@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    ignore:
+      # Must stay in lockstep with engines.vscode in package.json — bumped manually
+      # whenever we raise the minimum supported VS Code version.
+      - dependency-name: '@types/vscode'
+      # TypeScript majors wait until typescript-eslint declares support (TS 7 currently
+      # fails npm ci on its peer range). Minor/patch updates still flow.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

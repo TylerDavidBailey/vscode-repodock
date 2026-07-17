@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in RepoDock doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        1. Added folder ~/code
+        2. Expected the repo list to show my-repo
+        3. It doesn't appear
+    validations:
+      required: true
+  - type: input
+    id: repodock-version
+    attributes:
+      label: RepoDock version
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+      description: Help → About (e.g. 1.128.1)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Relevant settings
+      description: Your repodock.* settings if they matter (redact private paths).
+      render: json
+  - type: textarea
+    id: layout
+    attributes:
+      label: Folder layout (if scanning is the problem)
+      description: Rough sketch of where the affected repos live relative to the added folder.
+      render: text
