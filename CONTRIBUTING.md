@@ -35,7 +35,7 @@ Releases are fully automated by release-please, which reads
 
 - `feat: ...` → minor version bump
 - `fix: ...` → patch version bump
-- `feat!: ...` or a `BREAKING CHANGE:` footer → breaking (minor while pre-1.0)
+- `feat!: ...` or a `BREAKING CHANGE:` footer → major version bump
 - `docs:`, `chore:`, `ci:`, `test:`, `refactor:` → no release
 
 Your PR title and commits must follow this format — the version number and changelog are
@@ -45,5 +45,5 @@ generated from them.
 
 `src/core` (scanner, git porcelain parsing, grouping, sorting) is pure Node with no VS Code
 dependency. `src/ext` wires that core into the VS Code API: `treeProvider.ts` renders the
-sidebar, `quickPick.ts` the switcher, `commands.ts` registers commands, and `extension.ts`
-composes everything in `activate()`.
+sidebar, `folderPicker.ts` the Manage Folders picker, `commands.ts` registers commands, and
+`extension.ts` composes everything in `activate()`.

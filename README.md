@@ -23,7 +23,7 @@ RepoDock scans the folders you choose, lists every repo in a native sidebar with
 ## Features
 
 - **Recursive discovery** — finds every git repo inside the folders you add, including nested repos and repos inside other repos (submodules, vendored checkouts).
-- **Native sidebar** — a real VS Code tree in the Activity Bar, one row per repo. Nested repos show their parent folder in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
+- **Native sidebar** — a real VS Code tree in the Activity Bar, one row per repo. Repos below a folder's top level show their parent directory in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
 - **Git state at a glance** — each row shows its branch and when you last opened it; the tooltip adds changes, untracked, and ahead/behind. Refreshes when the window regains focus.
 - **Pin and hide** — pin daily drivers to the top; hide repos you never open.
 - **You are here** — the repo open in the current window is highlighted and auto-revealed.
@@ -52,7 +52,7 @@ Requires VS Code 1.96 or newer.
 | `RepoDock: Group by Folder` / `Show Flat List`              | Toggle folder sections (shown when several folders are configured)      |
 | `RepoDock: Unhide All Repositories`                         | Clear the hidden-repo list                                              |
 
-Repo rows also offer **Pin/Unpin**, **Open in New Window** (inline icon), **Add to Workspace**, **Open in Integrated Terminal**, **Reveal in Finder / File Explorer**, **Copy Path**, and **Hide Repository** via the context menu.
+Repo rows also offer **Pin/Unpin**, **Open in Current Window** / **Open in New Window** (inline icon), **Add to Workspace**, **Open in Integrated Terminal**, **Reveal in Finder / File Explorer**, **Copy Path**, and **Hide Repository** via the context menu.
 
 ## Settings
 
@@ -61,7 +61,7 @@ Repo rows also offer **Pin/Unpin**, **Open in New Window** (inline icon), **Add 
 | `repodock.directories`     | `[]`                                             | Folders to scan (`~` supported)                       |
 | `repodock.maxDepth`        | `4`                                              | Directory levels to descend below each folder         |
 | `repodock.exclude`         | `["node_modules", "bower_components", ".Trash"]` | Directory names skipped while scanning                |
-| `repodock.hiddenRepos`     | `[]`                                             | Repos hidden via the context menu (absolute paths)    |
+| `repodock.hiddenRepos`     | `[]`                                             | Repos hidden via the context menu (`~` supported)     |
 | `repodock.showNestedRepos` | `true`                                           | Show repos found inside another repo, nested under it |
 | `repodock.sortOrder`       | `"recent"`                                       | `recent` (last opened first) or `alphabetical`        |
 | `repodock.groupByFolder`   | `false`                                          | One section per configured folder instead of one list |
