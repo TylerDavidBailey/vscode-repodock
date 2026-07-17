@@ -1,5 +1,6 @@
 # RepoDock
 
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/tylerdavidbailey.repodock?label=marketplace)](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock)
 [![CI](https://github.com/TylerDavidBailey/vscode-repodock/actions/workflows/ci.yml/badge.svg)](https://github.com/TylerDavidBailey/vscode-repodock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -15,15 +16,14 @@ RepoDock scans the folders you choose, lists every repo in a native sidebar with
 - [Getting started](#getting-started)
 - [Commands](#commands)
 - [Settings](#settings)
-- [Install locally](#install-locally)
-- [Development](#development)
+- [Contributing](#contributing)
 - [Support](#support)
 - [License](#license)
 
 ## Features
 
 - **Recursive discovery** — finds every git repo inside the folders you add, including nested repos and repos inside other repos (submodules, vendored checkouts).
-- **Native sidebar** — a real VS Code tree in the Activity Bar, one row per repo. Nested repos show their parent folder in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
+- **Native sidebar** — a real VS Code tree in the Activity Bar, one row per repo. Repos below a folder's top level show their parent directory in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
 - **Git state at a glance** — each row shows its branch and when you last opened it; the tooltip adds changes, untracked, and ahead/behind. Refreshes when the window regains focus.
 - **Pin and hide** — pin daily drivers to the top; hide repos you never open.
 - **You are here** — the repo open in the current window is highlighted and auto-revealed.
@@ -36,9 +36,10 @@ RepoDock scans the folders you choose, lists every repo in a native sidebar with
 
 Requires VS Code 1.96 or newer.
 
-1. Open the RepoDock icon in the Activity Bar.
-2. Click **Add Folder** and pick the directory (or directories) where your repos live.
-3. Click any repo to open it — or focus the tree and type to filter.
+1. Install [RepoDock from the Marketplace](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock) — or run `code --install-extension tylerdavidbailey.repodock`.
+2. Open the RepoDock icon in the Activity Bar.
+3. Click **Add Folder** and pick the directory (or directories) where your repos live.
+4. Click any repo to open it — or focus the tree and type to filter.
 
 ## Commands
 
@@ -51,7 +52,7 @@ Requires VS Code 1.96 or newer.
 | `RepoDock: Group by Folder` / `Show Flat List`              | Toggle folder sections (shown when several folders are configured)      |
 | `RepoDock: Unhide All Repositories`                         | Clear the hidden-repo list                                              |
 
-Repo rows also offer **Pin/Unpin**, **Open in New Window** (inline icon), **Add to Workspace**, **Open in Integrated Terminal**, **Reveal in Finder / File Explorer**, **Copy Path**, and **Hide Repository** via the context menu.
+Repo rows also offer **Pin/Unpin**, **Open in Current Window** / **Open in New Window** (inline icon), **Add to Workspace**, **Open in Integrated Terminal**, **Reveal in Finder / File Explorer**, **Copy Path**, and **Hide Repository** via the context menu.
 
 ## Settings
 
@@ -60,38 +61,15 @@ Repo rows also offer **Pin/Unpin**, **Open in New Window** (inline icon), **Add 
 | `repodock.directories`     | `[]`                                             | Folders to scan (`~` supported)                       |
 | `repodock.maxDepth`        | `4`                                              | Directory levels to descend below each folder         |
 | `repodock.exclude`         | `["node_modules", "bower_components", ".Trash"]` | Directory names skipped while scanning                |
-| `repodock.hiddenRepos`     | `[]`                                             | Repos hidden via the context menu (absolute paths)    |
+| `repodock.hiddenRepos`     | `[]`                                             | Repos hidden via the context menu (`~` supported)     |
 | `repodock.showNestedRepos` | `true`                                           | Show repos found inside another repo, nested under it |
 | `repodock.sortOrder`       | `"recent"`                                       | `recent` (last opened first) or `alphabetical`        |
 | `repodock.groupByFolder`   | `false`                                          | One section per configured folder instead of one list |
 | `repodock.openInNewWindow` | `false`                                          | Open repos in a new window when clicked               |
 
-## Install locally
+## Contributing
 
-Until RepoDock is on the Marketplace, install it from a packaged `.vsix`:
-
-```sh
-make install-local   # packages and runs `code --install-extension repodock-<version>.vsix`
-```
-
-Or manually: `npm run package`, then run **Extensions: Install from VSIX…** and pick the file (`make uninstall-local` removes it). To try changes without installing, open this repo and press `F5` for an Extension Development Host with RepoDock loaded.
-
-## Development
-
-A Makefile wraps the npm scripts (`make help` lists everything):
-
-```sh
-make install         # npm install
-make watch           # esbuild in watch mode; press F5 to launch the Extension Development Host
-make test-unit       # vitest unit tests for the core (scanner, git parsing, grouping)
-make test-integration  # @vscode/test-cli suite in a real VS Code instance
-make lint            # eslint + prettier
-make package         # produce a .vsix
-```
-
-`src/core` has no dependency on the `vscode` module — scanning, git parsing, and grouping are all unit-testable; `src/ext` wires that core into the VS Code API.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow (conventional commits are required — releases are generated from them) and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
+Bug reports, feature ideas, and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, and the commit conventions releases are generated from.
 
 ## Support
 
