@@ -7,7 +7,7 @@ import type { RepoInfo, ScanOptions } from './types';
 const readdirLimit = createLimiter(16);
 const READDIR_TIMEOUT_MS = 15_000;
 
-/** readdir that gives up after a timeout — a dead network mount can hang forever. */
+/** readdir that gives up after a timeout, since a dead network mount can hang forever. */
 function readdirWithTimeout(dir: string): Promise<Dirent[]> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -41,7 +41,7 @@ export async function scanForRepos(root: string, options: ScanOptions): Promise<
     try {
       entries = await readdirLimit(() => readdirWithTimeout(dir));
     } catch {
-      return; // unreadable directory (permissions, races, hung mount) — skip
+      return; // skip unreadable directories (permissions, races, hung mounts)
     }
 
     let repoHere = parentRepoPath;

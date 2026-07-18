@@ -53,6 +53,21 @@ describe('RecencyStore', () => {
     expect(all.has('/repos/repo-204')).toBe(true);
   });
 
+  it('folds path case on Windows so a drive-letter casing change keeps the entry', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const store = new RecencyStore(fakeMemento());
+      await store.touch('C:\\Repos\\API');
+      await store.touch('c:\\repos\\api');
+      const all = store.all();
+      expect(all.size).toBe(1);
+      expect(all.has('c:\\repos\\api')).toBe(true);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
+
   it('re-touching an old entry saves it from eviction', async () => {
     let t = 1_000_000;
     vi.spyOn(Date, 'now').mockImplementation(() => ++t);

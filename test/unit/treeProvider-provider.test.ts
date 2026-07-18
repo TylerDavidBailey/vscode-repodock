@@ -145,7 +145,7 @@ describe('RepoTreeProvider', () => {
   it('renders one flat row per unique repo, keeping the shortest relative path', () => {
     const rows = provider.getChildren();
     expect(labels(rows)).toEqual(['alpha', 'beta']);
-    // beta is "sub/beta" under rootA but "beta" under rootA/sub — the short one wins,
+    // beta is "sub/beta" under rootA but "beta" under rootA/sub; the short one wins,
     // so no folder prefix appears in its description
     const beta = rows[1];
     expect(beta && 'repo' in beta ? beta.repo.relPath : undefined).toBe('beta');

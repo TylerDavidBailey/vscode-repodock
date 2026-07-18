@@ -19,6 +19,8 @@ interface CommandDeps {
   provider: RepoTreeProvider;
   recency: RecencyStore;
   pins: PinStore;
+  /** Rescan wrapped in the scanning context so the welcome view doesn't flash mid-scan. */
+  refresh: () => Promise<void>;
 }
 
 function repoOf(element: TreeElement | undefined): RepoInfo | undefined {
@@ -26,7 +28,7 @@ function repoOf(element: TreeElement | undefined): RepoInfo | undefined {
 }
 
 export function registerCommands(context: vscode.ExtensionContext, deps: CommandDeps): void {
-  const { provider, recency, pins } = deps;
+  const { provider, recency, pins, refresh } = deps;
 
   const open = async (repo: RepoInfo, forceNewWindow?: boolean): Promise<void> => {
     await recency.touch(repo.path);
@@ -81,7 +83,7 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
         await removeDirectory(expandPath(picked));
       }
     }),
-    vscode.commands.registerCommand('repodock.refresh', () => provider.refresh()),
+    vscode.commands.registerCommand('repodock.refresh', () => refresh()),
     vscode.commands.registerCommand('repodock.sortAlphabetically', () =>
       setSortOrder('alphabetical'),
     ),

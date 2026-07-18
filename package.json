@@ -1,7 +1,7 @@
 {
   "name": "repodock",
   "displayName": "RepoDock",
-  "description": "Add folders, discover every git repository inside them, and switch between repos without leaving VS Code.",
+  "description": "Discover every git repository inside the folders you add and switch between them without leaving VS Code.",
   "version": "1.0.0",
   "publisher": "tylerdavidbailey",
   "license": "MIT",
@@ -362,7 +362,7 @@
         "repodock.showNestedRepos": {
           "type": "boolean",
           "default": true,
-          "description": "Show repositories found inside another repository (submodules, vendored checkouts) nested under their parent."
+          "description": "Show repositories found inside another repository (submodules, vendored checkouts)."
         },
         "repodock.sortOrder": {
           "type": "string",

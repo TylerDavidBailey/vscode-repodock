@@ -143,6 +143,25 @@ describe('sortRepos', () => {
       'beta',
     ]);
   });
+
+  it('matches canonically-keyed pins and recency despite path casing on Windows', () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const win = (name: string): RepoInfo => ({
+        name,
+        path: `C:\\Repos\\${name}`,
+        root: 'C:\\Repos',
+        relPath: name,
+      });
+      const list = [win('alpha'), win('beta'), win('gamma')];
+      const pinned = new Set(['c:\\repos\\gamma']);
+      const recency = new Map([['c:\\repos\\beta', 2000]]);
+      expect(names(sortRepos(list, 'recent', recency, pinned))).toEqual(['gamma', 'beta', 'alpha']);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
 });
 
 describe('filterHiddenRepos', () => {
@@ -164,6 +183,23 @@ describe('filterHiddenRepos', () => {
       repo('other'),
     ];
     expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((r) => r.name)).toEqual(['other']);
+  });
+
+  it('drops a nested repo listed by an overlapping root with no parent chain', () => {
+    // ROOT/outer/mid is also a scan root, so its copy of inner carries no parentRepoPath
+    const viaOverlap: RepoInfo = {
+      name: 'inner',
+      path: `${ROOT}/outer/mid/inner`,
+      root: `${ROOT}/outer/mid`,
+      relPath: 'inner',
+    };
+    const repos = [repo('outer'), viaOverlap, repo('other')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((r) => r.name)).toEqual(['other']);
+  });
+
+  it('does not hide a sibling that merely shares the path prefix', () => {
+    const repos = [repo('outer'), repo('out')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/out`]).map((r) => r.name)).toEqual(['outer']);
   });
 });
 

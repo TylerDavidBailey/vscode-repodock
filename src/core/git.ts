@@ -51,6 +51,8 @@ interface GitStatusResult {
   state?: GitState;
   /** True when the git executable itself could not be found. */
   gitMissing: boolean;
+  /** True when git was killed by our timeout. Transient: the repo itself may be fine. */
+  timedOut: boolean;
 }
 
 function runGitStatus(repoPath: string): Promise<GitStatusResult> {
@@ -63,9 +65,12 @@ function runGitStatus(repoPath: string): Promise<GitStatusResult> {
           { timeout: 10_000, maxBuffer: 16 * 1024 * 1024 },
           (error: Error | null, stdout: string) => {
             if (error) {
-              resolve({ gitMissing: (error as NodeJS.ErrnoException).code === 'ENOENT' });
+              resolve({
+                gitMissing: (error as NodeJS.ErrnoException).code === 'ENOENT',
+                timedOut: (error as { killed?: boolean }).killed === true,
+              });
             } else {
-              resolve({ state: parsePorcelainV2(stdout), gitMissing: false });
+              resolve({ state: parsePorcelainV2(stdout), gitMissing: false, timedOut: false });
             }
           },
         );
@@ -79,20 +84,21 @@ export function readGitState(repoPath: string): Promise<GitState | undefined> {
 }
 
 /**
- * Loads git state for every path, invoking `onResult` as each one settles so the UI can
- * update incrementally. Reports whether the git executable was missing so callers can
- * explain the absence of status instead of failing silently.
+ * Loads git state for every path, calling `onResult` as each result arrives so the UI
+ * can update incrementally. `timedOut` means git hit our timeout; the last known state
+ * is still worth showing. Also reports whether the git executable was missing, so
+ * callers can say why status is absent instead of failing silently.
  */
 export async function loadGitStates(
   paths: string[],
-  onResult: (path: string, state: GitState | undefined) => void,
+  onResult: (path: string, state: GitState | undefined, timedOut: boolean) => void,
 ): Promise<{ gitMissing: boolean }> {
   let gitMissing = false;
   await Promise.all(
     paths.map(async (p) => {
       const result = await runGitStatus(p);
       gitMissing ||= result.gitMissing;
-      onResult(p, result.state);
+      onResult(p, result.state, result.timedOut);
     }),
   );
   return { gitMissing };

@@ -52,7 +52,10 @@ export function expandPath(p: string): string {
 
 export function tildify(p: string): string {
   const home = os.homedir();
-  return p === home || p.startsWith(home + path.sep) ? '~' + p.slice(home.length) : p;
+  // canonical keys fold case on Windows, where drive-letter casing varies (c:\ vs C:\)
+  const key = canonicalPathKey(p);
+  const homeKey = canonicalPathKey(home);
+  return key === homeKey || key.startsWith(homeKey + path.sep) ? '~' + p.slice(home.length) : p;
 }
 
 export async function addDirectories(paths: string[]): Promise<void> {

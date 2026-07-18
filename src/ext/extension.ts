@@ -40,7 +40,12 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     vscode.window.registerFileDecorationProvider(new CurrentRepoDecorationProvider()),
   );
 
-  registerCommands(context, { provider, recency, pins });
+  registerCommands(context, {
+    provider,
+    recency,
+    pins,
+    refresh: () => refreshWithProgress(provider),
+  });
 
   const updateContexts = () => {
     const config = getConfig();
@@ -79,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   );
 
   // git state goes stale while the window is unfocused (commits from a terminal,
-  // another VS Code window…) — reload it whenever the user comes back
+  // another VS Code window), so reload it whenever the user comes back
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((event) => {
       if (event.focused) void provider.refreshGitStates();
@@ -140,7 +145,7 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   });
 
   return {
-    refresh: () => initialScan.then(() => provider.refresh()),
+    refresh: () => initialScan.then(() => refreshWithProgress(provider)),
     getRepos: () => provider.getRepos(),
     provider,
   };

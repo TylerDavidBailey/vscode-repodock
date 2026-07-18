@@ -54,7 +54,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   private repos: RepoInfo[] = [];
   private readonly gitStates = new Map<string, GitState>();
-  /** One element per repo path — repos are deduped across overlapping scan roots. */
+  /** One element per repo path; repos are deduped across overlapping scan roots. */
   private readonly repoElements = new Map<string, TreeElement>();
   /** One element per scan root, keyed by canonical path; empty while the list is flat. */
   private readonly folderElements = new Map<string, FolderElement>();
@@ -115,11 +115,12 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     this.lastGitLoad = Date.now();
     const { gitMissing } = await loadGitStates(
       [...new Set(this.repos.map((r) => r.path))],
-      (repoPath, state) => {
+      (repoPath, state, timedOut) => {
         if (generation !== this.refreshGeneration) return;
         if (state) {
           this.gitStates.set(repoPath, state);
-        } else {
+        } else if (!timedOut) {
+          // timeouts are transient (busy disk, cold mount), so keep the last known state
           this.gitStates.delete(repoPath);
         }
         const element = this.repoElements.get(repoPath);
@@ -171,7 +172,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     );
   }
 
-  /** Repos that survive nested-repo filtering and cross-root dedupe — what the view shows. */
+  /** What the view shows: repos left after nested-repo filtering and cross-root dedupe. */
   private visibleRepos(): RepoInfo[] {
     const config = getConfig();
     return dedupeRepos(
@@ -190,7 +191,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   /**
    * Folder sections in configured-folder order when grouping is enabled and there is
-   * more than one folder to tell apart; undefined renders the classic flat list.
+   * more than one folder to tell apart; undefined means the flat list.
    */
   private folderGrouping(): FolderElement[] | undefined {
     const config = getConfig();
@@ -234,13 +235,13 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private repoItem(element: TreeElement): vscode.TreeItem {
     const { repo } = element;
     const state = this.gitStates.get(repo.path);
-    const openedAt = this.recency.all().get(repo.path);
+    const openedAt = this.recency.all().get(canonicalPathKey(repo.path));
 
     const isCurrent = this.currentRepos.has(canonicalPathKey(repo.path));
     const isPinned = this.pins.isPinned(repo.path);
     const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
     item.id = `repo:${repo.path}`;
-    // pinned repos swap the icon for a pin so their spot at the top is self-explanatory
+    // a pin icon explains why pinned repos sit at the top
     const iconId = isPinned ? 'pinned' : 'source-control';
     if (isCurrent) {
       item.iconPath = new vscode.ThemeIcon(iconId, new vscode.ThemeColor('charts.blue'));
@@ -278,7 +279,7 @@ function repoTooltip(
   isCurrent: boolean,
   isPinned: boolean,
 ): vscode.MarkdownString {
-  // repo names, paths, and branch names come from the filesystem — append those as
+  // repo names, paths, and branch names come from the filesystem; append them as
   // text so markdown in them can't inject formatting or links into the tooltip
   const md = new vscode.MarkdownString();
   md.appendMarkdown('**');
