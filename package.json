@@ -2,7 +2,7 @@
   "name": "repodock",
   "displayName": "RepoDock",
   "description": "Discover every git repository inside the folders you add and switch between them without leaving VS Code.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "tylerdavidbailey",
   "license": "MIT",
   "icon": "media/icon.png",
