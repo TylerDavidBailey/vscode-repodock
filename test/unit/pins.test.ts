@@ -37,4 +37,18 @@ describe('PinStore', () => {
     await pins.toggle('/repo/a');
     expect([...pins.all()]).toEqual(['/repo/b']);
   });
+
+  it('treats paths differing only in case as the same pin on Windows', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const pins = new PinStore(fakeMemento());
+      await pins.toggle('C:\\Repos\\API');
+      expect(pins.isPinned('c:\\repos\\api')).toBe(true);
+      await pins.toggle('c:\\repos\\api');
+      expect(pins.isPinned('C:\\Repos\\API')).toBe(false);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
 });

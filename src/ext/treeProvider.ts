@@ -235,7 +235,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private repoItem(element: TreeElement): vscode.TreeItem {
     const { repo } = element;
     const state = this.gitStates.get(repo.path);
-    const openedAt = this.recency.all().get(repo.path);
+    const openedAt = this.recency.all().get(canonicalPathKey(repo.path));
 
     const isCurrent = this.currentRepos.has(canonicalPathKey(repo.path));
     const isPinned = this.pins.isPinned(repo.path);

@@ -87,7 +87,7 @@ export function groupReposByRoot(repos: RepoInfo[], rootOrder: readonly string[]
  * Orders the flat list: pinned repos first, then the rest; each group by most recently
  * opened (falling back to name) or purely by name. Sorting by the displayed name keeps
  * same-named repos adjacent (their prefixes break the tie) instead of scattering them
- * by their parent folders.
+ * by their parent folders. `recency` and `pinned` are keyed by canonical path key.
  */
 export function sortRepos(
   repos: RepoInfo[],
@@ -97,15 +97,15 @@ export function sortRepos(
 ): RepoInfo[] {
   const byName = (a: RepoInfo, b: RepoInfo) =>
     a.name.localeCompare(b.name) || a.relPath.localeCompare(b.relPath);
+  const openedAt = (r: RepoInfo) => recency.get(canonicalPathKey(r.path)) ?? 0;
   const cmp =
     order === 'recent'
-      ? (a: RepoInfo, b: RepoInfo) =>
-          (recency.get(b.path) ?? 0) - (recency.get(a.path) ?? 0) || byName(a, b)
+      ? (a: RepoInfo, b: RepoInfo) => openedAt(b) - openedAt(a) || byName(a, b)
       : byName;
   const sorted = repos.slice().sort(cmp);
   return [
-    ...sorted.filter((r) => pinned.has(r.path)),
-    ...sorted.filter((r) => !pinned.has(r.path)),
+    ...sorted.filter((r) => pinned.has(canonicalPathKey(r.path))),
+    ...sorted.filter((r) => !pinned.has(canonicalPathKey(r.path))),
   ];
 }
 
