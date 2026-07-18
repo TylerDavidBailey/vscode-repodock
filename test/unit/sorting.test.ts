@@ -165,6 +165,23 @@ describe('filterHiddenRepos', () => {
     ];
     expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((r) => r.name)).toEqual(['other']);
   });
+
+  it('drops a nested repo listed by an overlapping root with no parent chain', () => {
+    // ROOT/outer/mid is also a scan root, so its copy of inner carries no parentRepoPath
+    const viaOverlap: RepoInfo = {
+      name: 'inner',
+      path: `${ROOT}/outer/mid/inner`,
+      root: `${ROOT}/outer/mid`,
+      relPath: 'inner',
+    };
+    const repos = [repo('outer'), viaOverlap, repo('other')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((r) => r.name)).toEqual(['other']);
+  });
+
+  it('does not hide a sibling that merely shares the path prefix', () => {
+    const repos = [repo('outer'), repo('out')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/out`]).map((r) => r.name)).toEqual(['outer']);
+  });
 });
 
 describe('formatRelativeTime', () => {

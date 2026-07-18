@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { canonicalPathKey } from './paths';
 import type { RepoInfo } from './types';
 
@@ -23,25 +24,18 @@ export function repoLabel(repo: RepoInfo): string {
 }
 
 /**
- * Drops hidden repositories from a scan result. Hiding a repo also hides the repos
- * nested inside it — they would otherwise dangle without a parent in the grouped view.
+ * Drops hidden repositories from a scan result. Hiding a repo also hides every repo
+ * inside its directory — they would otherwise dangle without a parent in the grouped
+ * view. Matching by path prefix (not the parentRepoPath chain) covers duplicates from
+ * overlapping scan roots, which can list a nested repo with no parent chain at all.
  */
 export function filterHiddenRepos(repos: RepoInfo[], hiddenPaths: Iterable<string>): RepoInfo[] {
-  const hidden = new Set([...hiddenPaths].map(canonicalPathKey));
-  if (hidden.size === 0) return repos;
-  const byPath = new Map(repos.map((repo) => [repo.path, repo]));
-  const isHidden = (repo: RepoInfo): boolean => {
-    for (
-      let current: RepoInfo | undefined = repo;
-      current !== undefined;
-      current =
-        current.parentRepoPath === undefined ? undefined : byPath.get(current.parentRepoPath)
-    ) {
-      if (hidden.has(canonicalPathKey(current.path))) return true;
-    }
-    return false;
-  };
-  return repos.filter((repo) => !isHidden(repo));
+  const hidden = [...hiddenPaths].map(canonicalPathKey);
+  if (hidden.length === 0) return repos;
+  return repos.filter((repo) => {
+    const key = canonicalPathKey(repo.path);
+    return !hidden.some((h) => key === h || key.startsWith(h + path.sep));
+  });
 }
 
 /**
