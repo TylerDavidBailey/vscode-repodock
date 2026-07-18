@@ -31,9 +31,11 @@ export function repoLabel(repo: RepoInfo): string {
 export function filterHiddenRepos(repos: RepoInfo[], hiddenPaths: Iterable<string>): RepoInfo[] {
   const hidden = [...hiddenPaths].map(canonicalPathKey);
   if (hidden.length === 0) return repos;
+  // Windows accepts '/' as a separator too; on POSIX a backslash is a filename character
+  const seps = path.sep === '\\' ? [path.sep, '/'] : [path.sep];
   return repos.filter((repo) => {
     const key = canonicalPathKey(repo.path);
-    return !hidden.some((h) => key === h || key.startsWith(h + path.sep));
+    return !hidden.some((h) => key === h || seps.some((sep) => key.startsWith(h + sep)));
   });
 }
 
