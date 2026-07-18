@@ -45,7 +45,7 @@ describe('RepoDock', () => {
       .update('directories', [fixture], vscode.ConfigurationTarget.Global);
     await api.refresh();
     // the directories update also kicks off a config-listener rescan that can supersede
-    // the refresh above (its git results are then discarded) — wait for state to land
+    // the refresh above (its git results are then discarded), so wait for state to land
     for (let i = 0; i < 100 && api.provider.getGitStates().size < 2; i++) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }

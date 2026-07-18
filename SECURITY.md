@@ -12,11 +12,11 @@ vulnerability reporting instead: go to the repository's **Security** tab →
 
 ## Design notes for reviewers
 
-- RepoDock makes **no network requests** and collects **no telemetry**; all data
+- RepoDock makes no network requests and collects no telemetry; all data
   (folder paths, last-opened timestamps) stays in VS Code's local storage.
 - The only external process it runs is `git status` via `execFile` (no shell) against
   repositories found under folders the user explicitly configured.
-- The published bundle has **zero runtime npm dependencies**.
+- The published bundle has no runtime npm dependencies.
 - In Restricted Mode (untrusted workspaces), the `repodock.directories` and
   `repodock.exclude` settings are ignored from workspace configuration, so a checked-out
   repository cannot redirect scanning.

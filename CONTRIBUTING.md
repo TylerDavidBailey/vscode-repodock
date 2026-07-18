@@ -20,11 +20,11 @@ into VS Code (`make uninstall-local` removes it). `make help` lists all targets.
 make lint test   # eslint + prettier, unit tests, and integration tests
 ```
 
-CI runs the same checks on Linux, macOS, and Windows — all must pass.
+CI runs the same checks on Linux, macOS, and Windows; all must pass.
 
-- **Unit tests** (`test/unit`, vitest) cover `src/core`, which must stay free of `vscode`
+- Unit tests (`test/unit`, vitest) cover `src/core`, which must stay free of `vscode`
   imports so it remains testable outside the editor.
-- **Integration tests** (`test/integration`, `@vscode/test-cli`) run in a real VS Code
+- Integration tests (`test/integration`, `@vscode/test-cli`) run in a real VS Code
   instance and cover the extension wiring.
 - New behavior needs a test; bug fixes need a regression test.
 
@@ -38,7 +38,7 @@ Releases are fully automated by release-please, which reads
 - `feat!: ...` or a `BREAKING CHANGE:` footer → major version bump
 - `docs:`, `chore:`, `ci:`, `test:`, `refactor:` → no release
 
-Your PR title and commits must follow this format — the version number and changelog are
+Your PR title and commits must follow this format; the version number and changelog are
 generated from them.
 
 ## Architecture in one paragraph

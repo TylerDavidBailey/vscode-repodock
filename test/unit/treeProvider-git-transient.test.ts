@@ -108,11 +108,11 @@ describe('RepoTreeProvider on transient git failures', () => {
     await provider.refresh();
     expect(provider.getGitStates().get('/root/alpha')?.branch).toBe('main');
 
-    nextGitLoad(undefined, true); // git timed out — stale state beats no state
+    nextGitLoad(undefined, true); // git timed out; keep showing the stale state
     await provider.refresh();
     expect(provider.getGitStates().get('/root/alpha')?.branch).toBe('main');
 
-    nextGitLoad(undefined, false); // git genuinely failed — the repo is gone or corrupt
+    nextGitLoad(undefined, false); // git genuinely failed; the repo is gone or corrupt
     await provider.refresh();
     expect(provider.getGitStates().has('/root/alpha')).toBe(false);
   });

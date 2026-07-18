@@ -51,7 +51,7 @@ interface GitStatusResult {
   state?: GitState;
   /** True when the git executable itself could not be found. */
   gitMissing: boolean;
-  /** True when git was killed by our timeout — a transient failure, not a verdict on the repo. */
+  /** True when git was killed by our timeout. Transient: the repo itself may be fine. */
   timedOut: boolean;
 }
 
@@ -84,11 +84,10 @@ export function readGitState(repoPath: string): Promise<GitState | undefined> {
 }
 
 /**
- * Loads git state for every path, invoking `onResult` as each one settles so the UI can
- * update incrementally. `timedOut` marks a state missing because git hit our timeout —
- * transient, so callers can keep showing the last known state. Reports whether the git
- * executable was missing so callers can explain the absence of status instead of
- * failing silently.
+ * Loads git state for every path, calling `onResult` as each result arrives so the UI
+ * can update incrementally. `timedOut` means git hit our timeout; the last known state
+ * is still worth showing. Also reports whether the git executable was missing, so
+ * callers can say why status is absent instead of failing silently.
  */
 export async function loadGitStates(
   paths: string[],

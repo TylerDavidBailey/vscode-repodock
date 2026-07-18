@@ -5,9 +5,8 @@ import type { RepoInfo } from './types';
 export type SortOrder = 'recent' | 'alphabetical';
 
 /**
- * Dim locator rendered before the branch for repos below the scan root's top level
- * ("abc/" for abc/ginkgo), keeping same-named repos distinguishable while the label
- * itself stays just the repo name. Empty for top-level repos.
+ * Parent path of the repo inside its scan root, with a trailing slash
+ * ("abc/" for abc/ginkgo). Empty for top-level repos and the root itself.
  */
 export function repoPrefix(repo: RepoInfo): string {
   const i = repo.relPath.lastIndexOf('/');
@@ -15,8 +14,8 @@ export function repoPrefix(repo: RepoInfo): string {
 }
 
 /**
- * Display label: the repo name, qualified by its parent path when it has one —
- * "ginkgo (abc)" — so same-named repos stay distinguishable without a bright full path.
+ * Display label: the repo name, plus its parent path in parentheses when it has
+ * one ("ginkgo (abc)") to tell same-named repos apart.
  */
 export function repoLabel(repo: RepoInfo): string {
   const prefix = repoPrefix(repo);
@@ -25,9 +24,9 @@ export function repoLabel(repo: RepoInfo): string {
 
 /**
  * Drops hidden repositories from a scan result. Hiding a repo also hides every repo
- * inside its directory — they would otherwise dangle without a parent in the grouped
- * view. Matching by path prefix (not the parentRepoPath chain) covers duplicates from
- * overlapping scan roots, which can list a nested repo with no parent chain at all.
+ * inside its directory, which would otherwise dangle without a parent in the grouped
+ * view. Matching by path prefix (instead of walking parentRepoPath chains) also
+ * catches duplicates from overlapping scan roots, which may carry no parent chain.
  */
 export function filterHiddenRepos(repos: RepoInfo[], hiddenPaths: Iterable<string>): RepoInfo[] {
   const hidden = [...hiddenPaths].map(canonicalPathKey);
@@ -39,8 +38,8 @@ export function filterHiddenRepos(repos: RepoInfo[], hiddenPaths: Iterable<strin
 }
 
 /**
- * One entry per repo path — overlapping scan roots find the same repo twice, under
- * different relative paths. Keeps the occurrence with the shortest relative path.
+ * One entry per repo path. Overlapping scan roots find the same repo twice under
+ * different relative paths; the occurrence with the shortest one wins.
  */
 export function dedupeRepos(repos: RepoInfo[]): RepoInfo[] {
   const byPath = new Map<string, RepoInfo>();
@@ -85,9 +84,9 @@ export function groupReposByRoot(repos: RepoInfo[], rootOrder: readonly string[]
 
 /**
  * Orders the flat list: pinned repos first, then the rest; each group by most recently
- * opened (falling back to name) or purely by name. Sorting by the displayed name keeps
- * same-named repos adjacent (their prefixes break the tie) instead of scattering them
- * by their parent folders. `recency` and `pinned` are keyed by canonical path key.
+ * opened (falling back to name) or purely by name. Name sorting compares the repo name
+ * first and relPath second, so same-named repos end up next to each other. `recency`
+ * and `pinned` are keyed by canonical path key.
  */
 export function sortRepos(
   repos: RepoInfo[],
@@ -127,7 +126,7 @@ function relativeTimeParts(
   return { value: Math.floor(days / 365), unit: 'y' };
 }
 
-/** Prose form ("5m ago", "yesterday") — used where the time reads as a sentence (tooltip). */
+/** Prose form ("5m ago", "yesterday"), used in the tooltip. */
 export function formatRelativeTime(timestamp: number, now: number = Date.now()): string {
   const { value, unit } = relativeTimeParts(timestamp, now);
   if (unit === 'now') return 'just now';
@@ -135,7 +134,7 @@ export function formatRelativeTime(timestamp: number, now: number = Date.now()):
   return `${value}${unit} ago`;
 }
 
-/** Compact form ("5m", "1d") — used in the dim row description to keep rows quiet. */
+/** Compact form ("5m", "1d"), used in the dim row description. */
 export function formatCompactRelativeTime(timestamp: number, now: number = Date.now()): string {
   const { value, unit } = relativeTimeParts(timestamp, now);
   return unit === 'now' ? 'now' : `${value}${unit}`;
