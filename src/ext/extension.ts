@@ -40,7 +40,12 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     vscode.window.registerFileDecorationProvider(new CurrentRepoDecorationProvider()),
   );
 
-  registerCommands(context, { provider, recency, pins });
+  registerCommands(context, {
+    provider,
+    recency,
+    pins,
+    refresh: () => refreshWithProgress(provider),
+  });
 
   const updateContexts = () => {
     const config = getConfig();
@@ -140,7 +145,7 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   });
 
   return {
-    refresh: () => initialScan.then(() => provider.refresh()),
+    refresh: () => initialScan.then(() => refreshWithProgress(provider)),
     getRepos: () => provider.getRepos(),
     provider,
   };
