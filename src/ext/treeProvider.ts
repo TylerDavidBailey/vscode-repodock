@@ -115,11 +115,12 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     this.lastGitLoad = Date.now();
     const { gitMissing } = await loadGitStates(
       [...new Set(this.repos.map((r) => r.path))],
-      (repoPath, state) => {
+      (repoPath, state, timedOut) => {
         if (generation !== this.refreshGeneration) return;
         if (state) {
           this.gitStates.set(repoPath, state);
-        } else {
+        } else if (!timedOut) {
+          // a timeout is transient (busy disk, cold mount) — keep the last known state
           this.gitStates.delete(repoPath);
         }
         const element = this.repoElements.get(repoPath);
