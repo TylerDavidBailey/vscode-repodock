@@ -81,6 +81,16 @@ describe('tildify', () => {
     const sibling = home + '-backup';
     expect(tildify(sibling)).toBe(sibling);
   });
+
+  it('matches the home directory case-insensitively on Windows', () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      expect(tildify(home.toUpperCase() + path.sep + 'code')).toBe('~' + path.sep + 'code');
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
 });
 
 describe('getConfig', () => {
