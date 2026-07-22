@@ -54,6 +54,28 @@ export function dedupeRepos(repos: RepoInfo[]): RepoInfo[] {
   return [...byPath.values()];
 }
 
+/**
+ * Whether two scan results list the same repos in the same order. Scan output is
+ * deterministic (per-root path order, roots in configured order), so background
+ * rescans that found nothing new compare equal and need no re-render.
+ */
+export function sameRepoList(a: readonly RepoInfo[], b: readonly RepoInfo[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((repo, i) => {
+      const other = b[i];
+      if (other === undefined) return false;
+      return (
+        repo.path === other.path &&
+        repo.root === other.root &&
+        repo.relPath === other.relPath &&
+        repo.name === other.name &&
+        repo.parentRepoPath === other.parentRepoPath
+      );
+    })
+  );
+}
+
 export interface RepoGroup {
   /** Absolute path of the scan root, as carried by the repos in the group. */
   root: string;

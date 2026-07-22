@@ -24,7 +24,7 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 
 - Finds every git repo in the folders you add, including repos inside other repos (submodules, vendored checkouts).
 - A real VS Code tree in the Activity Bar, one row per repo. Repos below a folder's top level show their parent directory in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
-- Each row shows its branch and when you last opened it. The tooltip adds changed and untracked counts plus ahead/behind, and status reloads when the window regains focus.
+- Each row shows its branch and when you last opened it. The tooltip adds changed and untracked counts plus ahead/behind. When the window regains focus, status reloads and folders are rescanned, so a repo cloned from a terminal shows up on its own.
 - Pin the repos you use daily to the top; hide the ones you never open.
 - The repo open in the current window is highlighted and revealed when the view opens.
 - Sort by most recently opened (compact `2h` timestamps) or alphabetically, from the title bar.
