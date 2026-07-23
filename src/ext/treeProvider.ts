@@ -288,10 +288,24 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   }
 }
 
-/** The dim text after the repo name: branch and last-opened time; details live in the tooltip. */
+/**
+ * The dim text after the repo name: branch (starred when the working tree is dirty, like the
+ * status bar's `main*`), ahead/behind arrows, and last-opened time; counts live in the tooltip.
+ */
 export function describeRepo(state: GitState | undefined, openedAt?: number): string {
   const parts: string[] = [];
-  if (state) parts.push(state.detached ? `${state.branch} (detached)` : state.branch);
+  if (state) {
+    let git = state.branch + (state.changes + state.untracked > 0 ? '*' : '');
+    if (state.detached) git += ' (detached)';
+    const arrows = [
+      state.ahead > 0 ? `↑${state.ahead}` : '',
+      state.behind > 0 ? `↓${state.behind}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    if (arrows) git += ` ${arrows}`;
+    parts.push(git);
+  }
   if (openedAt !== undefined) parts.push(formatCompactRelativeTime(openedAt));
   return parts.join(' · ');
 }
