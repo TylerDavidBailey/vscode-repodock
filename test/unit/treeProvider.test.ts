@@ -23,12 +23,28 @@ describe('describeRepo', () => {
     expect(describeRepo(state())).toBe('main');
   });
 
-  it('keeps dirty and ahead/behind counts out of the row (they live in the tooltip)', () => {
-    expect(describeRepo(state({ changes: 2, untracked: 1, ahead: 2, behind: 1 }))).toBe('main');
+  it('stars the branch when the working tree is dirty', () => {
+    expect(describeRepo(state({ changes: 2 }))).toBe('main*');
+    expect(describeRepo(state({ untracked: 1 }))).toBe('main*');
   });
 
-  it('marks detached heads', () => {
+  it('shows ahead/behind arrows, omitting zero counts', () => {
+    expect(describeRepo(state({ ahead: 2, behind: 1 }))).toBe('main ↑2 ↓1');
+    expect(describeRepo(state({ ahead: 2 }))).toBe('main ↑2');
+    expect(describeRepo(state({ behind: 1 }))).toBe('main ↓1');
+  });
+
+  it('combines the dirty star with arrows', () => {
+    expect(describeRepo(state({ changes: 2, untracked: 1, ahead: 2, behind: 1 }))).toBe(
+      'main* ↑2 ↓1',
+    );
+  });
+
+  it('marks detached heads, starring the sha when dirty', () => {
     expect(describeRepo(state({ branch: 'abc1234', detached: true }))).toBe('abc1234 (detached)');
+    expect(describeRepo(state({ branch: 'abc1234', detached: true, changes: 1 }))).toBe(
+      'abc1234* (detached)',
+    );
   });
 
   it('appends the last-opened time after the git summary', () => {
