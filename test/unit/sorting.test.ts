@@ -7,6 +7,7 @@ import {
   groupReposByRoot,
   repoLabel,
   repoPrefix,
+  sameRepoList,
   sortRepos,
 } from '../../src/core/sorting';
 import type { RepoInfo } from '../../src/core/types';
@@ -44,6 +45,22 @@ describe('repoLabel', () => {
   it('is just the name for top-level repos and the scan root itself', () => {
     expect(repoLabel(repo('ginkgo'))).toBe('ginkgo');
     expect(repoLabel(repo(''))).toBe('repos');
+  });
+});
+
+describe('sameRepoList', () => {
+  it('is true for equal lists, including empty ones', () => {
+    expect(sameRepoList([repo('alpha'), repo('sub/beta')], [repo('alpha'), repo('sub/beta')])).toBe(
+      true,
+    );
+    expect(sameRepoList([], [])).toBe(true);
+  });
+
+  it('is false when length, order, or any repo field differs', () => {
+    const a = [repo('alpha'), repo('sub/beta')];
+    expect(sameRepoList(a, [repo('alpha')])).toBe(false);
+    expect(sameRepoList(a, [repo('sub/beta'), repo('alpha')])).toBe(false);
+    expect(sameRepoList(a, [repo('alpha'), repo('sub/beta', `${ROOT}/sub`)])).toBe(false);
   });
 });
 

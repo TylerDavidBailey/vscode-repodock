@@ -83,14 +83,16 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     }),
   );
 
-  // git state goes stale while the window is unfocused (commits from a terminal,
-  // another VS Code window), so reload it whenever the user comes back
+  // git state and the repo list go stale while the window is unfocused (commits or
+  // fresh clones from a terminal), so refresh whenever the user comes back; this
+  // skips refreshWithProgress on purpose — toggling the scanning context here would
+  // flicker the welcome view for users with no repos
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((event) => {
-      if (event.focused) void provider.refreshGitStates();
+      if (event.focused) void provider.refreshIfStale();
     }),
     view.onDidChangeVisibility((event) => {
-      if (event.visible) void provider.refreshGitStates();
+      if (event.visible) void provider.refreshIfStale();
     }),
   );
 

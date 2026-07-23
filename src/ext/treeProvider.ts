@@ -9,6 +9,7 @@ import {
   formatRelativeTime,
   groupReposByRoot,
   repoLabel,
+  sameRepoList,
   sortRepos,
 } from '../core/sorting';
 import type { GitState, RepoInfo } from '../core/types';
@@ -20,6 +21,9 @@ export const CURRENT_REPO_SCHEME = 'repodock-current';
 
 /** Focus/visibility events can fire in bursts; don't re-run git more often than this. */
 const GIT_REFRESH_MIN_INTERVAL_MS = 5_000;
+
+/** Rescanning on focus keeps fresh clones visible, but don't hit the disk on every alt-tab. */
+const SCAN_REFRESH_MIN_INTERVAL_MS = 30_000;
 
 /** Colors the label of the repo open in this window (tree rows opt in via resourceUri). */
 export class CurrentRepoDecorationProvider implements vscode.FileDecorationProvider {
@@ -62,6 +66,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private currentRepos = new Set<string>();
   private warnedGitMissing = false;
   private lastGitLoad = 0;
+  private lastScan = 0;
 
   constructor(
     private readonly recency: RecencyStore,
@@ -93,13 +98,32 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     if (generation !== this.refreshGeneration) {
       return; // a newer refresh superseded this one
     }
-    this.repos = filterHiddenRepos(results.flat(), config.hiddenRepos);
-    const alive = new Set(this.repos.map((r) => r.path));
-    for (const repoPath of [...this.gitStates.keys()]) {
-      if (!alive.has(repoPath)) this.gitStates.delete(repoPath);
+    this.lastScan = Date.now();
+    const repos = filterHiddenRepos(results.flat(), config.hiddenRepos);
+    // an unchanged list (the usual outcome of a focus-triggered rescan) keeps the
+    // existing tree untouched; only git state updates flow through, per element
+    if (!sameRepoList(repos, this.repos)) {
+      this.repos = repos;
+      const alive = new Set(repos.map((r) => r.path));
+      for (const repoPath of [...this.gitStates.keys()]) {
+        if (!alive.has(repoPath)) this.gitStates.delete(repoPath);
+      }
+      this.rebuild();
     }
-    this.rebuild();
     await this.loadGit(generation);
+  }
+
+  /**
+   * Focus/visibility refresh: rescans the file system when the last scan is old
+   * enough (so fresh clones appear), otherwise just reloads git state. Both paths
+   * are throttled, so bursty events can call this freely.
+   */
+  async refreshIfStale(): Promise<void> {
+    if (Date.now() - this.lastScan >= SCAN_REFRESH_MIN_INTERVAL_MS) {
+      await this.refresh();
+    } else {
+      await this.refreshGitStates();
+    }
   }
 
   /**
