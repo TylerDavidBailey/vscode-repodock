@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { RepoDockApi } from '../../src/ext/extension';
+import { tildify } from '../../src/ext/settings';
 
 const EXTENSION_ID = 'tylerdavidbailey.repodock';
 
@@ -184,9 +185,11 @@ describe('RepoDock', () => {
     try {
       await until(() => rows().length === 2, 'two folder sections');
       const sections = rows();
+      // section labels are tildified; on Windows the temp dir sits under the home
+      // directory, so the fixture path really does shorten to ~\AppData\...
       assert.deepStrictEqual(
         sections.map((section) => section.label),
-        [fixture, inner],
+        [tildify(fixture), tildify(inner)],
       );
 
       // beta is found by both roots; after dedupe it belongs to the inner section only

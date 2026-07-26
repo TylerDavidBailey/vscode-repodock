@@ -13,7 +13,7 @@ import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider, type TreeNode } from '../../src/ext/treeProvider';
 import { fakeMemento } from './helpers/memento';
-import { makeGitState, makeRepo } from './helpers/repoFixture';
+import { absPath, makeGitState, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 const labels = (rows: TreeNode[]) => rows.map((row) => row.label);
@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 describe('RepoTreeProvider', () => {
-  const root = '/root';
+  const root = absPath('/root');
   const alpha = makeRepo({ path: '/root/alpha' });
   const beta = makeRepo({ path: '/root/sub/beta' });
 
@@ -64,7 +64,7 @@ describe('RepoTreeProvider', () => {
   });
 
   it('keeps the shortest relative path when overlapping roots find the same repo', async () => {
-    const sub = '/root/sub';
+    const sub = absPath('/root/sub');
     // beta is found by both roots: as "sub/beta" under /root and as "beta" under /root/sub
     const betaViaSub = makeRepo({ path: '/root/sub/beta', root: sub });
     state.config.set('directories', [root, sub]);
@@ -103,7 +103,7 @@ describe('RepoTreeProvider', () => {
   });
 
   it('groups repos into one section per folder when groupByFolder is set', async () => {
-    const sub = '/root/sub';
+    const sub = absPath('/root/sub');
     const betaViaSub = makeRepo({ path: '/root/sub/beta', root: sub });
     state.config.set('directories', [root, sub]);
     state.config.set('groupByFolder', true);
@@ -139,7 +139,7 @@ describe('RepoTreeProvider', () => {
   it('falls back to the flat list when only one of several folders holds repos', async () => {
     // the group-by-folder toggle is offered whenever 2+ folders are configured, but a
     // single section is indistinguishable from a flat list, so don't render one
-    state.config.set('directories', [root, '/other']);
+    state.config.set('directories', [root, absPath('/other')]);
     state.config.set('groupByFolder', true);
     const { provider } = newProvider();
     await provider.refresh();

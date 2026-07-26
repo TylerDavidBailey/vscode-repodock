@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
@@ -13,10 +12,12 @@ import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider, type TreeElement } from '../../src/ext/treeProvider';
 import { fakeExtensionContext } from './helpers/extensionContext';
 import { fakeMemento } from './helpers/memento';
-import { makeRepo } from './helpers/repoFixture';
+import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 const repo = makeRepo({ path: '/root/alpha' });
+const CODE = absPath('/srv/code');
+const WORK = absPath('/srv/work');
 const element: TreeElement = { repo, label: 'alpha' };
 
 let provider: RepoTreeProvider;
@@ -110,32 +111,32 @@ describe('removing a folder', () => {
   });
 
   it('offers the configured folders by their display form', async () => {
-    state.config.set('directories', ['/srv/code', '/srv/work']);
+    state.config.set('directories', [CODE, WORK]);
     state.showQuickPick.mockResolvedValue(undefined);
 
     await run('repodock.removeFolder');
 
-    expect(state.showQuickPick).toHaveBeenCalledWith(['/srv/code', '/srv/work'], {
+    expect(state.showQuickPick).toHaveBeenCalledWith([CODE, WORK], {
       placeHolder: 'Remove a folder from RepoDock',
     });
   });
 
   it('removes the picked folder, expanding the display form back to a path', async () => {
-    state.config.set('directories', ['/srv/code', '/srv/work']);
-    state.showQuickPick.mockResolvedValue('/srv/code');
+    state.config.set('directories', [CODE, WORK]);
+    state.showQuickPick.mockResolvedValue(CODE);
 
     await run('repodock.removeFolder');
 
-    expect(state.config.get('directories')).toEqual(['/srv/work']);
+    expect(state.config.get('directories')).toEqual([WORK]);
   });
 
   it('writes nothing when the picker is cancelled', async () => {
-    state.config.set('directories', ['/srv/code']);
+    state.config.set('directories', [CODE]);
     state.showQuickPick.mockResolvedValue(undefined);
 
     await run('repodock.removeFolder');
 
-    expect(state.config.get('directories')).toEqual(['/srv/code']);
+    expect(state.config.get('directories')).toEqual([CODE]);
   });
 });
 
@@ -237,9 +238,9 @@ describe('commands invoked without a tree element', () => {
 
 describe('folder management commands', () => {
   it('adds the folders picked from the open dialog', async () => {
-    state.showOpenDialog.mockResolvedValue([{ fsPath: path.join('/srv', 'code') }]);
+    state.showOpenDialog.mockResolvedValue([{ fsPath: CODE }]);
     await run('repodock.addFolder');
-    expect(state.config.get('directories')).toEqual([path.join('/srv', 'code')]);
+    expect(state.config.get('directories')).toEqual([CODE]);
   });
 
   it('adds nothing when the dialog is cancelled', async () => {

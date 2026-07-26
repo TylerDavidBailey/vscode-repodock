@@ -7,16 +7,28 @@ import type { GitState, RepoInfo } from '../../../src/core/types';
 const DEFAULT_ROOT = '/root';
 
 /**
- * A `RepoInfo` for tests that never touch disk. `path` and `root` default to POSIX-style
- * absolute paths; `name` and `relPath` are derived from `path` unless overridden.
+ * A POSIX-looking test path in the platform's own form — `/srv/code` becomes `D:\srv\code`
+ * on Windows. Anything a test puts in settings or compares against a scanned path has to go
+ * through this, because `expandPath` resolves configured paths the same way.
+ */
+export function absPath(p: string): string {
+  return path.resolve(p);
+}
+
+/**
+ * A `RepoInfo` for tests that never touch disk. Write `path` and `root` POSIX-style; both
+ * come back resolved for the current platform. `name` and `relPath` are derived from `path`,
+ * with `relPath` always '/'-separated, exactly as `scanForRepos` builds it.
  */
 export function makeRepo(overrides: Partial<RepoInfo> & { path: string }): RepoInfo {
-  const root = overrides.root ?? DEFAULT_ROOT;
+  const repoPath = absPath(overrides.path);
+  const root = absPath(overrides.root ?? DEFAULT_ROOT);
   return {
-    name: path.posix.basename(overrides.path),
-    root,
-    relPath: path.posix.relative(root, overrides.path),
+    name: path.basename(repoPath),
+    relPath: path.relative(root, repoPath).split(path.sep).join('/'),
     ...overrides,
+    path: repoPath,
+    root,
   };
 }
 

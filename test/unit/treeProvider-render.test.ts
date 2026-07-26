@@ -16,7 +16,7 @@ import {
   RepoTreeProvider,
 } from '../../src/ext/treeProvider';
 import { fakeMemento } from './helpers/memento';
-import { makeGitState, makeRepo } from './helpers/repoFixture';
+import { absPath, makeGitState, makeRepo } from './helpers/repoFixture';
 import { required } from './helpers/required';
 import { stubState as state } from './helpers/vscodeStub';
 
@@ -58,7 +58,7 @@ const tooltipOf = (item: vscode.TreeItem) => (item.tooltip as vscode.MarkdownStr
 
 beforeEach(() => {
   state.reset();
-  state.config.set('directories', ['/root']);
+  state.config.set('directories', [absPath('/root')]);
 });
 
 describe('contextValue', () => {
@@ -148,14 +148,14 @@ describe('the current-repo highlight', () => {
 
 describe('folder sections', () => {
   it('renders a count, an expanded state and no contextValue', async () => {
-    const sub = '/other';
-    state.config.set('directories', ['/root', sub]);
+    const sub = absPath('/other');
+    state.config.set('directories', [absPath('/root'), sub]);
     state.config.set('groupByFolder', true);
     const { provider } = await render([alpha, makeRepo({ path: '/other/beta', root: sub })]);
 
     const section = required(provider.getChildren()[0], 'a folder section');
     const item = provider.getTreeItem(section);
-    expect(item.id).toBe('folder:/root');
+    expect(item.id).toBe(`folder:${absPath('/root')}`);
     expect(item.description).toBe('1');
     expect(item.collapsibleState).toBe(2); // Expanded
     // folder rows deliberately carry no contextValue, so the /^repo/ menus skip them
@@ -251,18 +251,20 @@ describe('the tooltip', () => {
   });
 
   it('escapes markdown in filesystem-derived text rather than rendering it', async () => {
-    // repo names, paths and branch names come off disk; a crafted one must not inject a link
-    const evil = makeRepo({ path: '/root/[click](https://evil.test)' });
+    // repo names, paths and branch names come off disk; a crafted one must not inject a link.
+    // No '//' in the directory name: path.resolve would collapse it and the assertion below
+    // would be checking a string the code never saw.
+    const evil = makeRepo({ path: '/root/[click](evil.test)' });
     const { provider } = await render([evil], {
-      [evil.path]: makeGitState({ branch: '[branch](https://evil.test)' }),
+      [evil.path]: makeGitState({ branch: '[branch](evil.test)' }),
     });
 
     const { value } = itemFor(provider, evil.path).tooltip as vscode.MarkdownString;
     // the stub escapes exactly as appendText does, so an unescaped bracket here would
     // mean the tooltip built that segment with appendMarkdown
-    expect(value).toContain('\\[click\\]\\(https://evil\\.test\\)');
-    expect(value).toContain('\\[branch\\]\\(https://evil\\.test\\)');
-    expect(value).not.toContain('[click](https://evil.test)');
-    expect(value).not.toContain('[branch](https://evil.test)');
+    expect(value).toContain('\\[click\\]\\(evil\\.test\\)');
+    expect(value).toContain('\\[branch\\]\\(evil\\.test\\)');
+    expect(value).not.toContain('[click](evil.test)');
+    expect(value).not.toContain('[branch](evil.test)');
   });
 });

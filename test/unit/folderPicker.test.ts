@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
@@ -15,8 +14,11 @@ import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider } from '../../src/ext/treeProvider';
 import { fakeMemento } from './helpers/memento';
 import { required } from './helpers/required';
-import { makeRepo } from './helpers/repoFixture';
+import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state, type StubQuickPick } from './helpers/vscodeStub';
+
+const CODE = absPath('/srv/code');
+const WORK = absPath('/srv/work');
 
 /** Builds a provider whose scan found `repos`, so the manager has counts to render. */
 async function providerWith(repos: RepoInfo[]): Promise<RepoTreeProvider> {
@@ -56,9 +58,9 @@ describe('promptAddFolders', () => {
   });
 
   it('adds every selected folder', async () => {
-    state.showOpenDialog.mockResolvedValue([{ fsPath: '/srv/code' }, { fsPath: '/srv/work' }]);
+    state.showOpenDialog.mockResolvedValue([{ fsPath: CODE }, { fsPath: WORK }]);
     await promptAddFolders();
-    expect(state.config.get('directories')).toEqual(['/srv/code', '/srv/work']);
+    expect(state.config.get('directories')).toEqual([CODE, WORK]);
   });
 
   it('adds nothing when cancelled or when the selection is empty', async () => {
@@ -74,17 +76,13 @@ describe('promptAddFolders', () => {
 
 describe('showFolderManager', () => {
   it('lists each configured folder with a remove button and an add row', async () => {
-    state.config.set('directories', ['/srv/code', '/srv/work']);
+    state.config.set('directories', [CODE, WORK]);
     showFolderManager(await providerWith([]));
 
     const picker = openPicker();
     expect(picker.placeholder).toBe('Folders RepoDock scans for repositories');
     expect(picker.show).toHaveBeenCalled();
-    expect(picker.items.map((item) => item.label)).toEqual([
-      '/srv/code',
-      '/srv/work',
-      '$(add) Add Folder…',
-    ]);
+    expect(picker.items.map((item) => item.label)).toEqual([CODE, WORK, '$(add) Add Folder…']);
     // every folder row carries a path and the trash button; the add row carries neither
     expect(picker.items.slice(0, 2).every((item) => item.path !== undefined)).toBe(true);
     expect(picker.items.slice(0, 2).every((item) => item.buttons?.length === 1)).toBe(true);
@@ -93,7 +91,7 @@ describe('showFolderManager', () => {
   });
 
   it('counts the repos found under each folder, singular and plural', async () => {
-    state.config.set('directories', ['/srv/code', '/srv/work']);
+    state.config.set('directories', [CODE, WORK]);
     const provider = await providerWith([
       makeRepo({ path: '/srv/code/a', root: '/srv/code' }),
       makeRepo({ path: '/srv/code/b', root: '/srv/code' }),
@@ -110,7 +108,7 @@ describe('showFolderManager', () => {
   });
 
   it('counts a repo once when two scan roots both found it', async () => {
-    state.config.set('directories', ['/srv/code']);
+    state.config.set('directories', [CODE]);
     const provider = await providerWith([
       makeRepo({ path: '/srv/code/a', root: '/srv/code' }),
       // the same repo, listed a second time under the same root
@@ -123,29 +121,29 @@ describe('showFolderManager', () => {
   });
 
   it('removes a folder from the trash button and rebuilds the list', async () => {
-    state.config.set('directories', ['/srv/code', '/srv/work']);
+    state.config.set('directories', [CODE, WORK]);
     showFolderManager(await providerWith([]));
     const picker = openPicker();
 
     await picker.fireTriggerItemButton({ item: picker.items[0] });
 
-    expect(state.config.get('directories')).toEqual(['/srv/work']);
-    expect(picker.items.map((item) => item.label)).toEqual(['/srv/work', '$(add) Add Folder…']);
+    expect(state.config.get('directories')).toEqual([WORK]);
+    expect(picker.items.map((item) => item.label)).toEqual([WORK, '$(add) Add Folder…']);
   });
 
   it('ignores a button press on the add row', async () => {
-    state.config.set('directories', ['/srv/code']);
+    state.config.set('directories', [CODE]);
     showFolderManager(await providerWith([]));
     const picker = openPicker();
 
     await picker.fireTriggerItemButton({ item: picker.items[1] });
 
-    expect(state.config.get('directories')).toEqual(['/srv/code']);
+    expect(state.config.get('directories')).toEqual([CODE]);
   });
 
   it('opens the folder dialog when the add row is accepted', async () => {
-    state.config.set('directories', ['/srv/code']);
-    state.showOpenDialog.mockResolvedValue([{ fsPath: path.join('/srv', 'new') }]);
+    state.config.set('directories', [CODE]);
+    state.showOpenDialog.mockResolvedValue([{ fsPath: absPath('/srv/new') }]);
     showFolderManager(await providerWith([]));
     const picker = openPicker();
     picker.selectedItems = [required(picker.items[1], 'the add row')];
@@ -155,11 +153,11 @@ describe('showFolderManager', () => {
     // hidden first: the OS dialog takes over the screen
     expect(picker.hide).toHaveBeenCalled();
     expect(state.showOpenDialog).toHaveBeenCalled();
-    expect(state.config.get('directories')).toEqual(['/srv/code', path.join('/srv', 'new')]);
+    expect(state.config.get('directories')).toEqual([CODE, absPath('/srv/new')]);
   });
 
   it('just closes when a folder row is accepted', async () => {
-    state.config.set('directories', ['/srv/code']);
+    state.config.set('directories', [CODE]);
     showFolderManager(await providerWith([]));
     const picker = openPicker();
     picker.selectedItems = [required(picker.items[0], 'a folder row')];
@@ -168,7 +166,7 @@ describe('showFolderManager', () => {
 
     expect(picker.hide).toHaveBeenCalled();
     expect(state.showOpenDialog).not.toHaveBeenCalled();
-    expect(state.config.get('directories')).toEqual(['/srv/code']);
+    expect(state.config.get('directories')).toEqual([CODE]);
   });
 
   it('disposes the picker once it hides', async () => {

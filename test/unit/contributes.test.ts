@@ -16,7 +16,7 @@ import { RepoTreeProvider } from '../../src/ext/treeProvider';
 import contributes from '../../package.json';
 import { fakeExtensionContext } from './helpers/extensionContext';
 import { fakeMemento } from './helpers/memento';
-import { makeRepo } from './helpers/repoFixture';
+import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 /**
@@ -50,7 +50,7 @@ async function renderedContextValues(): Promise<RowContextValues> {
   const repos = [plain, pinned, nested, nestedPinned];
 
   vi.mocked(scanForRepos).mockResolvedValue(repos.map((repo) => ({ ...repo })));
-  state.config.set('directories', ['/root']);
+  state.config.set('directories', [absPath('/root')]);
 
   const pins = new PinStore(fakeMemento());
   await pins.toggle(pinned.path);
