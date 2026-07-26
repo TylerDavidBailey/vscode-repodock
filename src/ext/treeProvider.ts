@@ -150,6 +150,8 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   }
 
   private async loadGit(generation: number): Promise<void> {
+    // set before the await, not after: this also serves as an in-flight guard, so a burst
+    // of focus events can't start several concurrent git loads
     this.lastGitLoad = Date.now();
     const { gitMissing } = await loadGitStates(
       [...new Set(this.repos.map((repo) => repo.path))],
