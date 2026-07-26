@@ -6,6 +6,7 @@ vi.mock('../../src/core/git', () => ({
   loadGitStates: vi.fn(() => Promise.resolve({ gitMissing: false })),
 }));
 
+import { canonicalPathKey } from '../../src/core/paths';
 import { registerCommands } from '../../src/ext/commands';
 import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
@@ -51,7 +52,8 @@ describe('opening a repository', () => {
   it('records the open and hands the folder to VS Code', async () => {
     await run('repodock.open', element);
 
-    expect([...recency.all().keys()]).toEqual([repo.path]);
+    // recency is keyed canonically, which folds drive-letter case on Windows
+    expect([...recency.all().keys()]).toEqual([canonicalPathKey(repo.path)]);
     const [uri, options] = lastExecute('vscode.openFolder') ?? [];
     expect((uri as { fsPath: string }).fsPath).toBe(repo.path);
     expect(options).toEqual({ forceNewWindow: false });
