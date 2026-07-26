@@ -128,7 +128,10 @@ export function createStubState(): StubState {
       listeners.config.length = 0;
       listeners.windowState.length = 0;
       listeners.workspaceFolders.length = 0;
-      vi.clearAllMocks();
+      // resetAllMocks, not clearAllMocks: clear drops recorded calls but keeps
+      // implementations, so a mockResolvedValue seeded by one test would silently answer
+      // the next one. Suites re-seed scanForRepos/loadGitStates in their own beforeEach.
+      vi.resetAllMocks();
     },
   };
   return state;
@@ -217,9 +220,14 @@ export function createVscodeStub(state: StubState = stubState) {
      * Escapes markdown syntax the way the real `appendText` does. Without this a test
      * could not tell `appendText` from `appendMarkdown`, which is the whole point of the
      * tooltip's handling of repo and branch names taken off disk.
+     *
+     * The character set mirrors `escapeMarkdownSyntaxTokens` in VS Code's
+     * `vs/base/common/htmlContent.ts`. Note `~` is escaped (tildify puts one at the front
+     * of most repo paths) and `.` is not — an earlier version of this stub had both
+     * backwards, which made the tooltip test assert a string VS Code never produces.
      */
     appendText(text: string) {
-      this.value += text.replace(/[\\`*_{}[\]()#+\-.!]/g, '\\$&').replace(/\n/g, '\n\n');
+      this.value += text.replace(/[\\`*_{}[\]()#+\-!~]/g, '\\$&').replace(/\n/g, '\n\n');
       return this;
     }
     appendMarkdown(text: string) {

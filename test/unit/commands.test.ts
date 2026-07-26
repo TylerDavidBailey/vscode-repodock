@@ -1,3 +1,5 @@
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
@@ -19,6 +21,10 @@ import { stubState as state } from './helpers/vscodeStub';
 const repo = makeRepo({ path: '/root/alpha' });
 const CODE = absPath('/srv/code');
 const WORK = absPath('/srv/work');
+// under $HOME on purpose: the picker shows tildify'd labels and feeds the choice back
+// through expandPath, and neither step is observable with a path outside the home dir
+const HOME_DIR = path.join(os.homedir(), 'code');
+const HOME_LABEL = '~' + path.sep + 'code';
 const element: TreeElement = { repo, label: 'alpha' };
 
 let provider: RepoTreeProvider;
@@ -113,19 +119,21 @@ describe('removing a folder', () => {
   });
 
   it('offers the configured folders by their display form', async () => {
-    state.config.set('directories', [CODE, WORK]);
+    state.config.set('directories', [HOME_DIR, WORK]);
     state.showQuickPick.mockResolvedValue(undefined);
 
     await run('repodock.removeFolder');
 
-    expect(state.showQuickPick).toHaveBeenCalledWith([CODE, WORK], {
+    // the home-relative one is shown tildified, the outside one unchanged
+    expect(state.showQuickPick).toHaveBeenCalledWith([HOME_LABEL, WORK], {
       placeHolder: 'Remove a folder from RepoDock',
     });
   });
 
   it('removes the picked folder, expanding the display form back to a path', async () => {
-    state.config.set('directories', [CODE, WORK]);
-    state.showQuickPick.mockResolvedValue(CODE);
+    state.config.set('directories', [HOME_DIR, WORK]);
+    // the picker hands back the label it displayed, which is the ~ form
+    state.showQuickPick.mockResolvedValue(HOME_LABEL);
 
     await run('repodock.removeFolder');
 

@@ -231,6 +231,10 @@ describe('the current workspace', () => {
     await api.refresh();
     expect(treeView().reveal).not.toHaveBeenCalled();
 
+    // a visibility change that leaves the view hidden must not trigger the reveal
+    await treeView().fireVisibility(false);
+    expect(treeView().reveal).not.toHaveBeenCalled();
+
     await treeView().fireVisibility(true);
     expect(treeView().reveal).toHaveBeenCalledTimes(1);
 

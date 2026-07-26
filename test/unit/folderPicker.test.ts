@@ -107,7 +107,7 @@ describe('showFolderManager', () => {
     ]);
   });
 
-  it('counts a repo once when two scan roots both found it', async () => {
+  it('counts a repo once when one scan root finds it twice', async () => {
     state.config.set('directories', [CODE]);
     const provider = await providerWith([
       makeRepo({ path: '/srv/code/a', root: '/srv/code' }),
@@ -118,6 +118,25 @@ describe('showFolderManager', () => {
     showFolderManager(provider);
 
     expect(openPicker().items[0]?.description).toBe('1 repo');
+  });
+
+  it('counts a repo under each root that found it, since each is its own row', async () => {
+    // overlapping roots: /srv/code and /srv/code/inner both see the same repo. The count
+    // is per configured folder, so it is right for both rows to include it.
+    const inner = absPath('/srv/code/inner');
+    state.config.set('directories', [CODE, inner]);
+    const provider = await providerWith([
+      makeRepo({ path: '/srv/code/inner/a', root: '/srv/code' }),
+      makeRepo({ path: '/srv/code/inner/a', root: '/srv/code/inner' }),
+    ]);
+
+    showFolderManager(provider);
+
+    expect(openPicker().items.map((item) => item.description)).toEqual([
+      '1 repo',
+      '1 repo',
+      undefined,
+    ]);
   });
 
   it('removes a folder from the trash button and rebuilds the list', async () => {
@@ -150,9 +169,12 @@ describe('showFolderManager', () => {
 
     await picker.fireAccept();
 
-    // hidden first: the OS dialog takes over the screen
+    // hidden first, not merely at some point: the OS dialog takes over the screen
     expect(picker.hide).toHaveBeenCalled();
     expect(state.showOpenDialog).toHaveBeenCalled();
+    expect(picker.hide.mock.invocationCallOrder[0]).toBeLessThan(
+      required(state.showOpenDialog.mock.invocationCallOrder[0], 'a dialog invocation'),
+    );
     expect(state.config.get('directories')).toEqual([CODE, absPath('/srv/new')]);
   });
 

@@ -27,8 +27,25 @@ permissions:
   contents: read
 
 jobs:
+  # Verification lives here rather than in the caller so both entry points are gated.
+  # A workflow_dispatch recovery run is exactly when a broken tag is most likely, so it
+  # is the last path that should be allowed to skip the checks.
+  verify:
+    name: Verify ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: ./.github/actions/setup
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: xvfb-run -a npm run test:integration
+
   publish:
     name: Package and publish ${{ inputs.tag }}
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write

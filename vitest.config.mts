@@ -3,6 +3,10 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['test/unit/**/*.test.ts'],
+    // The vscode stub records into a module-level singleton, which is only per-suite
+    // because each file gets its own module registry. Turning isolation off as a speed
+    // hack would silently make every suite share one stub.
+    isolate: true,
     coverage: {
       provider: 'v8',
       // every source file, not just the ones a test happened to import

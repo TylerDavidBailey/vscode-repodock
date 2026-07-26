@@ -217,24 +217,27 @@ describe('RepoDock', () => {
   });
 
   it('floats a pinned repo and restores it on unpin, updating icon and contextValue', async () => {
-    const alphaPath = path.join(fixture, 'alpha');
-    /** The rendered item for alpha, re-read after each command so the state is current. */
-    const alphaItem = (): vscode.TreeItem => {
-      const element = api.provider.findRepoElement(alphaPath);
-      assert.ok(element, 'expected an element for alpha');
+    // vendor, not alpha: alpha already sorts first, so pinning it would prove nothing
+    const vendorPath = path.join(fixture, 'alpha', 'vendor');
+    /** The rendered item for vendor, re-read after each command so the state is current. */
+    const vendorItem = (): vscode.TreeItem => {
+      const element = api.provider.findRepoElement(vendorPath);
+      assert.ok(element, 'expected an element for vendor');
       return api.provider.getTreeItem(element);
     };
-    const element = api.provider.findRepoElement(alphaPath);
-    assert.ok(element, 'expected an element for alpha');
+    const element = api.provider.findRepoElement(vendorPath);
+    assert.ok(element, 'expected an element for vendor');
+    assert.strictEqual(labels()[0], 'alpha', 'vendor should start last');
 
     await vscode.commands.executeCommand('repodock.pinRepo', element);
-    assert.strictEqual(labels()[0], 'alpha', 'a pinned repo sorts first');
-    assert.strictEqual((alphaItem().iconPath as vscode.ThemeIcon).id, 'pinned');
-    assert.strictEqual(alphaItem().contextValue, 'repo-pinned');
+    assert.strictEqual(labels()[0], 'vendor (alpha)', 'a pinned repo sorts first');
+    assert.strictEqual((vendorItem().iconPath as vscode.ThemeIcon).id, 'pinned');
+    assert.strictEqual(vendorItem().contextValue, 'repoNested-pinned');
 
     await vscode.commands.executeCommand('repodock.unpinRepo', element);
-    assert.strictEqual((alphaItem().iconPath as vscode.ThemeIcon).id, 'source-control');
-    assert.strictEqual(alphaItem().contextValue, 'repo');
+    assert.strictEqual(labels()[0], 'alpha', 'unpinning restores the original order');
+    assert.strictEqual((vendorItem().iconPath as vscode.ThemeIcon).id, 'source-control');
+    assert.strictEqual(vendorItem().contextValue, 'repoNested');
   });
 
   it('rescans when directories change', async () => {

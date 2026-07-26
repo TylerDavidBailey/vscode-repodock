@@ -1,3 +1,5 @@
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
@@ -261,10 +263,21 @@ describe('the tooltip', () => {
 
     const { value } = itemFor(provider, evil.path).tooltip as vscode.MarkdownString;
     // the stub escapes exactly as appendText does, so an unescaped bracket here would
-    // mean the tooltip built that segment with appendMarkdown
-    expect(value).toContain('\\[click\\]\\(evil\\.test\\)');
-    expect(value).toContain('\\[branch\\]\\(evil\\.test\\)');
+    // mean the tooltip built that segment with appendMarkdown. '.' is deliberately not
+    // escaped — VS Code does not escape it either.
+    expect(value).toContain('\\[click\\]\\(evil.test\\)');
+    expect(value).toContain('\\[branch\\]\\(evil.test\\)');
     expect(value).not.toContain('[click](evil.test)');
     expect(value).not.toContain('[branch](evil.test)');
+  });
+
+  it('escapes the tilde tildify puts at the front of a home-relative path', async () => {
+    const home = makeRepo({ path: path.join(os.homedir(), 'code', 'alpha') });
+    const { provider } = await render([home]);
+
+    const { value } = itemFor(provider, home.path).tooltip as vscode.MarkdownString;
+    // '~' opens strikethrough in GitHub-flavored markdown, so appendText escapes it
+    expect(value).toContain('\\~');
+    expect(value).not.toMatch(/(^|[^\\])~/);
   });
 });

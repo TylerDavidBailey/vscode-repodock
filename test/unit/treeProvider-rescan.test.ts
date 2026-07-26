@@ -15,7 +15,7 @@ import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider } from '../../src/ext/treeProvider';
 import { fakeMemento } from './helpers/memento';
-import { makeRepo } from './helpers/repoFixture';
+import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 const repo = (name: string): RepoInfo => makeRepo({ path: `/root/${name}` });
@@ -33,7 +33,7 @@ function newProvider(): RepoTreeProvider {
 describe('RepoTreeProvider background rescans', () => {
   beforeAll(() => {
     vi.useFakeTimers();
-    state.config.set('directories', ['/root']);
+    state.config.set('directories', [absPath('/root')]);
   });
 
   afterAll(() => {
@@ -92,14 +92,14 @@ describe('RepoTreeProvider background rescans', () => {
     expect(vi.mocked(scanForRepos).mock.calls.length).toBe(scans);
   });
 
-  it('throttles a burst of git reloads to one in-flight load', async () => {
+  it('collapses a burst of git reloads into one per throttle window', async () => {
     const provider = newProvider();
     scanResult = [repo('alpha')];
     await provider.refresh();
     const loads = vi.mocked(loadGitStates).mock.calls.length;
 
-    // window focus fires in bursts; the throttle window opens when a load starts, not when
-    // it finishes, so these must collapse into a single load
+    // window focus fires in bursts; the window opens when a load starts, not when it
+    // finishes, so calls arriving inside it collapse into a single load
     vi.advanceTimersByTime(6_000);
     await Promise.all([
       provider.refreshGitStates(),
