@@ -1,0 +1,59 @@
+name: Publish
+
+# Packages a tag and ships it: VSIX onto the GitHub release, then the Marketplace.
+# release-please calls this after it creates a release; workflow_dispatch is the manual
+# path for a hand-pushed tag or a release whose publish step needs re-running. Both are
+# idempotent — `gh release upload --clobber` replaces the asset and `vsce publish` refuses
+# a version that already exists.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to publish.
+        required: true
+        type: string
+    secrets:
+      VSCE_PAT:
+        description: Marketplace personal access token. Publishing is skipped when unset.
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish (e.g. v1.2.0).
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Package and publish ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: ./.github/actions/setup
+      - run: npm run package
+      - name: Create the GitHub release, or attach to an existing one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" ./*.vsix --clobber
+          else
+            gh release create "$TAG" ./*.vsix --title "$TAG" --generate-notes
+          fi
+      - name: Publish to the Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "VSCE_PAT secret not set — skipping marketplace publish."
+            exit 0
+          fi
+          npx vsce publish --pat "$VSCE_PAT"

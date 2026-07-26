@@ -8,6 +8,11 @@ permissions:
   contents: write
   pull-requests: write
 
+# Serialize: two merges landing together must not race to cut a release.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -21,37 +26,32 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Tags created by release-please use the workflow token, which cannot trigger
-  # release.yml — so publishing happens here instead.
-  publish:
+  # The tag was verified on the PR that produced it, but re-check it here: this is the
+  # last gate before the Marketplace, and it is the first time the release commit itself
+  # is tested as a unit.
+  verify:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm run test:unit
-      - run: npm run package
-      - name: Attach VSIX to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" *.vsix --clobber
-      - name: Publish to Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "VSCE_PAT secret not set — skipping marketplace publish."
-            exit 0
-          fi
-          npx vsce publish --pat "$VSCE_PAT"
+      - run: npm run test:coverage
+      - run: xvfb-run -a npm run test:integration
+
+  # Tags created by release-please use the workflow token, which cannot trigger another
+  # workflow's `push` event — so publishing is called from here rather than left to fire
+  # on the tag.
+  publish:
+    needs: [release-please, verify]
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    permissions:
+      contents: write
