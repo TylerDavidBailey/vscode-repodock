@@ -1,19 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Memento } from 'vscode';
 import { RecencyStore } from '../../src/ext/recency';
-
-function fakeMemento(): Memento {
-  const store = new Map<string, unknown>();
-  return {
-    keys: () => [...store.keys()],
-    get: <T>(key: string, defaultValue?: T) =>
-      store.has(key) ? (store.get(key) as T) : defaultValue,
-    update: (key: string, value: unknown) => {
-      store.set(key, value);
-      return Promise.resolve();
-    },
-  };
-}
+import { fakeMemento } from './helpers/memento';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -28,8 +15,8 @@ describe('RecencyStore', () => {
   });
 
   it('updates the timestamp when a path is touched again', async () => {
-    let t = 1_000_000;
-    vi.spyOn(Date, 'now').mockImplementation(() => ++t);
+    let clock = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => ++clock);
     const store = new RecencyStore(fakeMemento());
     await store.touch('/repos/alpha');
     const first = store.all().get('/repos/alpha');
@@ -40,8 +27,8 @@ describe('RecencyStore', () => {
   });
 
   it('caps the store at 200 entries, evicting the oldest', async () => {
-    let t = 1_000_000;
-    vi.spyOn(Date, 'now').mockImplementation(() => ++t);
+    let clock = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => ++clock);
     const store = new RecencyStore(fakeMemento());
     for (let i = 0; i < 205; i++) {
       await store.touch(`/repos/repo-${i}`);
@@ -69,8 +56,8 @@ describe('RecencyStore', () => {
   });
 
   it('re-touching an old entry saves it from eviction', async () => {
-    let t = 1_000_000;
-    vi.spyOn(Date, 'now').mockImplementation(() => ++t);
+    let clock = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => ++clock);
     const store = new RecencyStore(fakeMemento());
     for (let i = 0; i < 200; i++) {
       await store.touch(`/repos/repo-${i}`);

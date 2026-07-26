@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { GitState } from '../../src/core/types';
 import { loadGitStates } from '../../src/core/git';
+import type { GitState } from '../../src/core/types';
 
 // simulate git outcomes per repo path: a timeout kill vs. an ordinary failure
 vi.mock('node:child_process', () => ({
@@ -26,8 +26,8 @@ describe('loadGitStates on git failures', () => {
     const results = new Map<string, { state: GitState | undefined; timedOut: boolean }>();
     const { gitMissing } = await loadGitStates(
       ['/slow-repo', '/broken-repo'],
-      (p, state, timedOut) => {
-        results.set(p, { state, timedOut });
+      (repoPath, state, timedOut) => {
+        results.set(repoPath, { state, timedOut });
       },
     );
     expect(gitMissing).toBe(false);

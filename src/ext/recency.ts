@@ -14,9 +14,10 @@ export class RecencyStore {
 
   all(): Map<string, number> {
     const map = new Map<string, number>();
-    for (const [p, t] of Object.entries(this.memento.get<Record<string, number>>(KEY, {}))) {
-      const key = canonicalPathKey(p);
-      map.set(key, Math.max(t, map.get(key) ?? 0));
+    const stored = this.memento.get<Record<string, number>>(KEY, {});
+    for (const [storedPath, timestamp] of Object.entries(stored)) {
+      const key = canonicalPathKey(storedPath);
+      map.set(key, Math.max(timestamp, map.get(key) ?? 0));
     }
     return map;
   }

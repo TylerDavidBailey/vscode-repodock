@@ -9,21 +9,11 @@ import {
   tildify,
 } from '../../src/ext/settings';
 
-// minimal stateful stand-in for vscode.workspace.getConfiguration('repodock')
 const { configStore } = vi.hoisted(() => ({ configStore: new Map<string, unknown>() }));
-vi.mock('vscode', () => ({
-  ConfigurationTarget: { Global: 1 },
-  workspace: {
-    getConfiguration: () => ({
-      get: <T>(key: string, defaultValue: T) =>
-        configStore.has(key) ? (configStore.get(key) as T) : defaultValue,
-      update: (key: string, value: unknown) => {
-        configStore.set(key, value);
-        return Promise.resolve();
-      },
-    }),
-  },
-}));
+
+vi.mock('vscode', async () =>
+  (await import('./helpers/vscodeStub.js')).createVscodeStub(configStore),
+);
 
 beforeEach(() => {
   configStore.clear();

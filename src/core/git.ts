@@ -2,7 +2,11 @@ import { execFile } from 'node:child_process';
 import { createLimiter } from './limit';
 import type { GitState } from './types';
 
-const gitLimit = createLimiter(8);
+const MAX_CONCURRENT_GIT = 8;
+const GIT_STATUS_TIMEOUT_MS = 10_000;
+const GIT_STATUS_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+
+const gitLimit = createLimiter(MAX_CONCURRENT_GIT);
 
 /**
  * Parses `git status --porcelain=v2 --branch` output.
@@ -55,6 +59,11 @@ interface GitStatusResult {
   timedOut: boolean;
 }
 
+/**
+ * Runs `git status` in one repository, never rejecting: every failure comes back as a
+ * result with no `state`. The two failure modes worth telling apart are git not being
+ * installed (`ENOENT`) and our own timeout killing it, since only the latter is transient.
+ */
 function runGitStatus(repoPath: string): Promise<GitStatusResult> {
   return gitLimit(
     () =>
@@ -62,7 +71,7 @@ function runGitStatus(repoPath: string): Promise<GitStatusResult> {
         execFile(
           'git',
           ['-C', repoPath, 'status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
-          { timeout: 10_000, maxBuffer: 16 * 1024 * 1024 },
+          { timeout: GIT_STATUS_TIMEOUT_MS, maxBuffer: GIT_STATUS_MAX_BUFFER_BYTES },
           (error: Error | null, stdout: string) => {
             if (error) {
               resolve({
@@ -78,7 +87,10 @@ function runGitStatus(repoPath: string): Promise<GitStatusResult> {
   );
 }
 
-/** Reads the git state of a repository, or undefined when git fails (missing, corrupt repo). */
+/**
+ * Reads the git state of a repository, or undefined when git fails (missing, corrupt repo).
+ * Exposed for unit tests; the extension uses `loadGitStates` for the whole list at once.
+ */
 export function readGitState(repoPath: string): Promise<GitState | undefined> {
   return runGitStatus(repoPath).then((result) => result.state);
 }
@@ -95,10 +107,10 @@ export async function loadGitStates(
 ): Promise<{ gitMissing: boolean }> {
   let gitMissing = false;
   await Promise.all(
-    paths.map(async (p) => {
-      const result = await runGitStatus(p);
+    paths.map(async (repoPath) => {
+      const result = await runGitStatus(repoPath);
       gitMissing ||= result.gitMissing;
-      onResult(p, result.state, result.timedOut);
+      onResult(repoPath, result.state, result.timedOut);
     }),
   );
   return { gitMissing };

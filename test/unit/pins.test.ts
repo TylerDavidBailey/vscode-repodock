@@ -1,19 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Memento } from 'vscode';
 import { PinStore } from '../../src/ext/pins';
-
-function fakeMemento(): Memento {
-  const store = new Map<string, unknown>();
-  return {
-    keys: () => [...store.keys()],
-    get: <T>(key: string, defaultValue?: T) =>
-      store.has(key) ? (store.get(key) as T) : defaultValue,
-    update: (key: string, value: unknown) => {
-      store.set(key, value);
-      return Promise.resolve();
-    },
-  };
-}
+import { fakeMemento } from './helpers/memento';
 
 describe('PinStore', () => {
   it('starts empty', () => {
@@ -22,7 +9,7 @@ describe('PinStore', () => {
     expect(pins.isPinned('/repo/a')).toBe(false);
   });
 
-  it('toggle pins and unpins a path', async () => {
+  it('pins a path and unpins it again on a second toggle', async () => {
     const pins = new PinStore(fakeMemento());
     await pins.toggle('/repo/a');
     expect(pins.isPinned('/repo/a')).toBe(true);

@@ -14,6 +14,7 @@ export interface RepoDockApi {
   provider: RepoTreeProvider;
 }
 
+// change which repos exist, so the file system has to be walked again
 const RESCAN_SETTINGS = [
   'repodock.directories',
   'repodock.maxDepth',
@@ -26,7 +27,14 @@ const REBUILD_SETTINGS = [
   'repodock.showNestedRepos',
   'repodock.groupByFolder',
 ];
+// `repodock.openInNewWindow` is in neither list: it is read live on each open, so a
+// change to it needs no reaction here.
 
+/**
+ * Builds the tree view and its stores, registers commands and listeners, then kicks off the
+ * first scan without awaiting it so activation stays fast. The returned API is for tests;
+ * its `refresh` chains off that first scan so a test never races it.
+ */
 export function activate(context: vscode.ExtensionContext): RepoDockApi {
   const recency = new RecencyStore(context.globalState);
   const pins = new PinStore(context.globalState);
@@ -77,16 +85,13 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
       } else if (REBUILD_SETTINGS.some((key) => event.affectsConfiguration(key))) {
         updateContexts();
         provider.rebuild();
-      } else if (event.affectsConfiguration('repodock.openInNewWindow')) {
-        // read live from settings on each open; nothing to rebuild
       }
     }),
   );
 
-  // git state and the repo list go stale while the window is unfocused (commits or
-  // fresh clones from a terminal), so refresh whenever the user comes back; this
-  // skips refreshWithProgress on purpose — toggling the scanning context here would
-  // flicker the welcome view for users with no repos
+  // git state and the repo list go stale while the window is unfocused (commits or fresh
+  // clones from a terminal), so refresh whenever the user comes back — deliberately not
+  // via refreshWithProgress, since the user didn't ask for these
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((event) => {
       if (event.focused) void provider.refreshIfStale();
@@ -153,6 +158,11 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   };
 }
 
+/**
+ * Refreshes with the `repodock.scanning` context set, which swaps the welcome view for a
+ * progress message. Only for refreshes the user asked for: on an automatic one the toggle
+ * would flicker the welcome view for users with no repos.
+ */
 async function refreshWithProgress(provider: RepoTreeProvider): Promise<void> {
   await vscode.commands.executeCommand('setContext', 'repodock.scanning', true);
   try {

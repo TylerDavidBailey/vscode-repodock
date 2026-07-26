@@ -166,8 +166,8 @@ describe('loadGitStates', () => {
 
   it('reports a result for every path and no missing git', async () => {
     const results = new Map<string, unknown>();
-    const { gitMissing } = await loadGitStates([repo, notRepo], (p, state) => {
-      results.set(p, state);
+    const { gitMissing } = await loadGitStates([repo, notRepo], (repoPath, state) => {
+      results.set(repoPath, state);
     });
     expect(gitMissing).toBe(false);
     expect(results.size).toBe(2);
@@ -180,8 +180,8 @@ describe('loadGitStates', () => {
     process.env.PATH = ''; // git can no longer be found
     try {
       const results = new Map<string, unknown>();
-      const { gitMissing } = await loadGitStates([repo], (p, state) => {
-        results.set(p, state);
+      const { gitMissing } = await loadGitStates([repo], (repoPath, state) => {
+        results.set(repoPath, state);
       });
       expect(gitMissing).toBe(true);
       expect(results.get(repo)).toBeUndefined();

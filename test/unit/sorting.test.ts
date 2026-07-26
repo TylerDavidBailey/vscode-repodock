@@ -14,7 +14,7 @@ import type { RepoInfo } from '../../src/core/types';
 
 const ROOT = '/home/user/repos';
 
-function repo(relPath: string, parentRepoPath?: string): RepoInfo {
+function makeRepo(relPath: string, parentRepoPath?: string): RepoInfo {
   const name = relPath === '' ? 'repos' : (relPath.split('/').pop() ?? relPath);
   return {
     name,
@@ -27,46 +27,49 @@ function repo(relPath: string, parentRepoPath?: string): RepoInfo {
 
 describe('repoPrefix', () => {
   it('returns the parent path with a trailing slash for repos below the top level', () => {
-    expect(repoPrefix(repo('clients/acme/api'))).toBe('clients/acme/');
+    expect(repoPrefix(makeRepo('clients/acme/api'))).toBe('clients/acme/');
   });
 
   it('is empty for top-level repos and the scan root itself', () => {
-    expect(repoPrefix(repo('todo'))).toBe('');
-    expect(repoPrefix(repo(''))).toBe('');
+    expect(repoPrefix(makeRepo('todo'))).toBe('');
+    expect(repoPrefix(makeRepo(''))).toBe('');
   });
 });
 
 describe('repoLabel', () => {
   it('qualifies the name with its parent path in parentheses', () => {
-    expect(repoLabel(repo('abc/ginkgo'))).toBe('ginkgo (abc)');
-    expect(repoLabel(repo('clients/acme/api'))).toBe('api (clients/acme)');
+    expect(repoLabel(makeRepo('abc/ginkgo'))).toBe('ginkgo (abc)');
+    expect(repoLabel(makeRepo('clients/acme/api'))).toBe('api (clients/acme)');
   });
 
   it('is just the name for top-level repos and the scan root itself', () => {
-    expect(repoLabel(repo('ginkgo'))).toBe('ginkgo');
-    expect(repoLabel(repo(''))).toBe('repos');
+    expect(repoLabel(makeRepo('ginkgo'))).toBe('ginkgo');
+    expect(repoLabel(makeRepo(''))).toBe('repos');
   });
 });
 
 describe('sameRepoList', () => {
   it('is true for equal lists, including empty ones', () => {
-    expect(sameRepoList([repo('alpha'), repo('sub/beta')], [repo('alpha'), repo('sub/beta')])).toBe(
-      true,
-    );
+    expect(
+      sameRepoList(
+        [makeRepo('alpha'), makeRepo('sub/beta')],
+        [makeRepo('alpha'), makeRepo('sub/beta')],
+      ),
+    ).toBe(true);
     expect(sameRepoList([], [])).toBe(true);
   });
 
   it('is false when length, order, or any repo field differs', () => {
-    const a = [repo('alpha'), repo('sub/beta')];
-    expect(sameRepoList(a, [repo('alpha')])).toBe(false);
-    expect(sameRepoList(a, [repo('sub/beta'), repo('alpha')])).toBe(false);
-    expect(sameRepoList(a, [repo('alpha'), repo('sub/beta', `${ROOT}/sub`)])).toBe(false);
+    const a = [makeRepo('alpha'), makeRepo('sub/beta')];
+    expect(sameRepoList(a, [makeRepo('alpha')])).toBe(false);
+    expect(sameRepoList(a, [makeRepo('sub/beta'), makeRepo('alpha')])).toBe(false);
+    expect(sameRepoList(a, [makeRepo('alpha'), makeRepo('sub/beta', `${ROOT}/sub`)])).toBe(false);
   });
 });
 
 describe('dedupeRepos', () => {
   it('keeps the occurrence with the shortest relative path when roots overlap', () => {
-    const fromOuter = repo('sub/beta');
+    const fromOuter = makeRepo('sub/beta');
     const fromInner: RepoInfo = {
       name: 'beta',
       path: `${ROOT}/sub/beta`,
@@ -78,14 +81,14 @@ describe('dedupeRepos', () => {
   });
 
   it('leaves distinct repos alone', () => {
-    const repos = [repo('alpha'), repo('beta')];
+    const repos = [makeRepo('alpha'), makeRepo('beta')];
     expect(dedupeRepos(repos)).toEqual(repos);
   });
 });
 
 describe('groupReposByRoot', () => {
   const OTHER = '/home/user/other';
-  const otherRepo = (relPath: string): RepoInfo => ({
+  const makeOtherRepo = (relPath: string): RepoInfo => ({
     name: relPath.split('/').pop() ?? relPath,
     path: `${OTHER}/${relPath}`,
     root: OTHER,
@@ -93,39 +96,45 @@ describe('groupReposByRoot', () => {
   });
 
   it('splits repos into one group per root, in the configured folder order', () => {
-    const repos = [otherRepo('zeta'), repo('alpha'), repo('gamma')];
+    const repos = [makeOtherRepo('zeta'), makeRepo('alpha'), makeRepo('gamma')];
     const groups = groupReposByRoot(repos, [ROOT, OTHER]);
-    expect(groups.map((g) => g.root)).toEqual([ROOT, OTHER]);
-    expect(groups.map((g) => g.repos.map((r) => r.name))).toEqual([['alpha', 'gamma'], ['zeta']]);
+    expect(groups.map((group) => group.root)).toEqual([ROOT, OTHER]);
+    expect(groups.map((group) => group.repos.map((repo) => repo.name))).toEqual([
+      ['alpha', 'gamma'],
+      ['zeta'],
+    ]);
   });
 
   it('files an overlap-deduped repo under the inner root only', () => {
     // beta sits under both ROOT and ROOT/sub; dedupe keeps the inner occurrence,
     // so grouping shows it once, in the more specific folder's section
     const inner = `${ROOT}/sub`;
-    const fromOuter = repo('sub/beta');
+    const fromOuter = makeRepo('sub/beta');
     const fromInner: RepoInfo = {
       name: 'beta',
       path: `${ROOT}/sub/beta`,
       root: inner,
       relPath: 'beta',
     };
-    const deduped = dedupeRepos([fromOuter, fromInner, repo('alpha')]);
+    const deduped = dedupeRepos([fromOuter, fromInner, makeRepo('alpha')]);
     const groups = groupReposByRoot(deduped, [ROOT, inner]);
-    expect(groups.map((g) => g.root)).toEqual([ROOT, inner]);
-    expect(groups.map((g) => g.repos.map((r) => r.name))).toEqual([['alpha'], ['beta']]);
+    expect(groups.map((group) => group.root)).toEqual([ROOT, inner]);
+    expect(groups.map((group) => group.repos.map((repo) => repo.name))).toEqual([
+      ['alpha'],
+      ['beta'],
+    ]);
   });
 
   it('places roots missing from the configured order last', () => {
-    const groups = groupReposByRoot([repo('alpha'), otherRepo('zeta')], [OTHER]);
-    expect(groups.map((g) => g.root)).toEqual([OTHER, ROOT]);
+    const groups = groupReposByRoot([makeRepo('alpha'), makeOtherRepo('zeta')], [OTHER]);
+    expect(groups.map((group) => group.root)).toEqual([OTHER, ROOT]);
   });
 });
 
 describe('sortRepos', () => {
-  const repos = [repo('gamma'), repo('alpha'), repo('sub/beta')];
+  const repos = [makeRepo('gamma'), makeRepo('alpha'), makeRepo('sub/beta')];
   const none = new Set<string>();
-  const names = (list: RepoInfo[]) => list.map((r) => r.name);
+  const names = (list: RepoInfo[]) => list.map((repo) => repo.name);
 
   it('orders by recency, falling back to name', () => {
     const recency = new Map([[`${ROOT}/sub/beta`, 2000]]);
@@ -143,8 +152,8 @@ describe('sortRepos', () => {
   });
 
   it('keeps same-named repos adjacent, tie-broken by their relative path', () => {
-    const twins = [repo('ginkgo'), repo('abc/ginkgo')];
-    expect(sortRepos(twins, 'alphabetical', new Map(), none).map((r) => r.relPath)).toEqual([
+    const twins = [makeRepo('ginkgo'), makeRepo('abc/ginkgo')];
+    expect(sortRepos(twins, 'alphabetical', new Map(), none).map((repo) => repo.relPath)).toEqual([
       'abc/ginkgo',
       'ginkgo',
     ]);
@@ -183,23 +192,23 @@ describe('sortRepos', () => {
 
 describe('filterHiddenRepos', () => {
   it('returns the list untouched when nothing is hidden', () => {
-    const repos = [repo('alpha'), repo('beta')];
+    const repos = [makeRepo('alpha'), makeRepo('beta')];
     expect(filterHiddenRepos(repos, [])).toBe(repos);
   });
 
   it('drops hidden repos', () => {
-    const repos = [repo('alpha'), repo('beta')];
-    expect(filterHiddenRepos(repos, [`${ROOT}/alpha`]).map((r) => r.name)).toEqual(['beta']);
+    const repos = [makeRepo('alpha'), makeRepo('beta')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/alpha`]).map((repo) => repo.name)).toEqual(['beta']);
   });
 
   it('drops repos nested inside a hidden repo, transitively', () => {
     const repos = [
-      repo('outer'),
-      repo('outer/mid', `${ROOT}/outer`),
-      repo('outer/mid/inner', `${ROOT}/outer/mid`),
-      repo('other'),
+      makeRepo('outer'),
+      makeRepo('outer/mid', `${ROOT}/outer`),
+      makeRepo('outer/mid/inner', `${ROOT}/outer/mid`),
+      makeRepo('other'),
     ];
-    expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((r) => r.name)).toEqual(['other']);
+    expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((repo) => repo.name)).toEqual(['other']);
   });
 
   it('drops a nested repo listed by an overlapping root with no parent chain', () => {
@@ -210,21 +219,24 @@ describe('filterHiddenRepos', () => {
       root: `${ROOT}/outer/mid`,
       relPath: 'inner',
     };
-    const repos = [repo('outer'), viaOverlap, repo('other')];
-    expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((r) => r.name)).toEqual(['other']);
+    const repos = [makeRepo('outer'), viaOverlap, makeRepo('other')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/outer`]).map((repo) => repo.name)).toEqual(['other']);
   });
 
   it('does not hide a sibling that merely shares the path prefix', () => {
-    const repos = [repo('outer'), repo('out')];
-    expect(filterHiddenRepos(repos, [`${ROOT}/out`]).map((r) => r.name)).toEqual(['outer']);
+    const repos = [makeRepo('outer'), makeRepo('out')];
+    expect(filterHiddenRepos(repos, [`${ROOT}/out`]).map((repo) => repo.name)).toEqual(['outer']);
   });
 });
 
+// a fixed `now` keeps the boundary cases below exact rather than clock-dependent
+const NOW = Date.UTC(2026, 6, 14, 12, 0, 0);
+const MINUTE = 60 * 1000;
+const HOUR = 3600 * 1000;
+const DAY = 86400 * 1000;
+
 describe('formatRelativeTime', () => {
-  const now = Date.UTC(2026, 6, 14, 12, 0, 0);
-  const MINUTE = 60 * 1000;
-  const HOUR = 3600 * 1000;
-  const DAY = 86400 * 1000;
+  const now = NOW;
   const cases: [string, number, string][] = [
     ['zero elapsed', now, 'just now'],
     ['a future timestamp (clock skew)', now + MINUTE, 'just now'],
@@ -252,10 +264,7 @@ describe('formatRelativeTime', () => {
 });
 
 describe('formatCompactRelativeTime', () => {
-  const now = Date.UTC(2026, 6, 14, 12, 0, 0);
-  const MINUTE = 60 * 1000;
-  const HOUR = 3600 * 1000;
-  const DAY = 86400 * 1000;
+  const now = NOW;
   const cases: [string, number, string][] = [
     ['zero elapsed', now, 'now'],
     ['a future timestamp (clock skew)', now + MINUTE, 'now'],

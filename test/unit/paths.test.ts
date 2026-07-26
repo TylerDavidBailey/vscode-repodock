@@ -11,7 +11,7 @@ describe('canonicalPathKey', () => {
     }
   });
 
-  it('keys equal for identical paths', () => {
+  it('leaves POSIX paths untouched, so keys stay comparable to the original', () => {
     expect(canonicalPathKey('/home/user/repos')).toBe(canonicalPathKey('/home/user/repos'));
   });
 });

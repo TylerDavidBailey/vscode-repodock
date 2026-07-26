@@ -43,7 +43,7 @@ generated from them.
 
 ## Architecture in one paragraph
 
-`src/core` (scanner, git porcelain parsing, grouping, sorting) is pure Node with no VS Code
+`src/core` (scanner, git porcelain parsing, labels, grouping and sorting) is pure Node with no VS Code
 dependency. `src/ext` wires that core into the VS Code API: `treeProvider.ts` renders the
 sidebar, `folderPicker.ts` the Manage Folders picker, `commands.ts` registers commands, and
 `extension.ts` composes everything in `activate()`.

@@ -15,14 +15,36 @@ user-facing docs; this file covers what isn't obvious from it.
 ## Architecture
 
 - `src/core/` must never import `vscode`: scanning (`scanner.ts`), `git status` parsing
-  (`git.ts`), labels/sorting/dedupe/hidden-filtering (`sorting.ts`), path keys (`paths.ts`).
-  Put new logic here whenever possible so it stays unit-testable.
+  (`git.ts`), labels/sorting/dedupe/hidden-filtering (`sorting.ts`), path keys (`paths.ts`),
+  shared types (`types.ts`), and a concurrency limiter (`limit.ts`). Put new logic here
+  whenever possible so it stays unit-testable.
 - `src/ext/` wires core into the VS Code API: activation (`extension.ts`), tree
   (`treeProvider.ts`), commands (`commands.ts`), the Manage Folders picker
   (`folderPicker.ts`), settings (`settings.ts`), and Memento-backed stores
   (`recency.ts`, `pins.ts`).
-- Unit tests stub the `vscode` module with `vi.mock`; `test/unit/treeProvider-provider.test.ts`
-  shows the pattern.
+- Unit tests share fixtures from `test/unit/helpers/`: `fakeMemento()` for the Memento-backed
+  stores, and `createVscodeStub(configStore)` for the `vscode` module. Because `vi.mock`
+  factories are hoisted above imports, wire the stub up through a dynamic import —
+  `test/unit/treeProvider.test.ts` shows the pattern.
+
+## Comments and naming
+
+Follows the TSDoc spec and the Microsoft TypeScript/VS Code coding guidelines.
+
+- `/** */` documents exported symbols; `//` explains _why_ inside a body. Never put a
+  `/** */` block on a statement.
+- Document an export only where the signature doesn't already say it — semantics, units,
+  side effects, what `undefined` means. A summary line with no tags is the normal case.
+- Never write types in `@param`/`@returns`; the compiler enforces them. A tag that restates
+  the parameter name is noise — drop the tag.
+- Keep a comment only if it says what the code cannot: invariants, platform quirks, rejected
+  alternatives, security reasoning, issue links. Delete anything that narrates the code.
+- Don't re-document a `vscode` interface you implement (`getTreeItem`, `getChildren`). Do
+  document what the type system can't see: which `contextValue` strings drive `package.json`
+  menus, which settings a function writes, what a write triggers downstream.
+- Names: verb-phrase functions, `is`/`has`/`should` booleans, PascalCase types with no `I`
+  prefix, no `Async` suffix, camelCase filenames. Whole words over abbreviations — single
+  letters only in comparators.
 
 ## Conventions and gotchas
 
