@@ -5,8 +5,7 @@ export default defineConfig({
     include: ['test/unit/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      // measure every source file, not just the ones a test happened to import
-      all: true,
+      // every source file, not just the ones a test happened to import
       include: ['src/**/*.ts'],
       // types only: no runtime code to cover
       exclude: ['src/core/types.ts'],
