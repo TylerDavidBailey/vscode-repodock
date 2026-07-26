@@ -8,16 +8,15 @@ import {
   removeDirectory,
   tildify,
 } from '../../src/ext/settings';
+import { stubState as state } from './helpers/vscodeStub';
 
-const { configStore } = vi.hoisted(() => ({ configStore: new Map<string, unknown>() }));
-
-vi.mock('vscode', async () =>
-  (await import('./helpers/vscodeStub.js')).createVscodeStub(configStore),
-);
+vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
 
 beforeEach(() => {
-  configStore.clear();
+  state.reset();
 });
+
+const configStore = state.config;
 
 const home = os.homedir();
 

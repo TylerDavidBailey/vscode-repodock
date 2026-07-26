@@ -1,0 +1,10 @@
+{
+  // Integration tests are the only place mocha's globals belong. Keeping them in their own
+  // project stops a vitest file that forgot `import { describe } from 'vitest'` from compiling,
+  // and lets eslint's project service resolve these files without listing them at the root.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"]
+  },
+  "include": ["."]
+}

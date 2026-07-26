@@ -4,7 +4,10 @@
     "module": "Node16",
     "moduleResolution": "Node16",
     "lib": ["ES2022"],
-    "types": ["node", "mocha"],
+    // TypeScript 6 needs this listed explicitly; automatic @types inclusion no longer applies.
+    // Mocha's globals belong to the integration tests only (tsconfig.test.json) — leaving them
+    // here would let a vitest file that forgot its `import { describe } from 'vitest'` compile.
+    "types": ["node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -19,5 +22,5 @@
     "sourceMap": true,
     "noEmit": true
   },
-  "include": ["src", "test/unit", "test/integration", "vitest.config.mts"]
+  "include": ["src", "test/unit", "vitest.config.mts"]
 }

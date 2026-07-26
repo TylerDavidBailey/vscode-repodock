@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const { configStore } = vi.hoisted(() => ({ configStore: new Map<string, unknown>() }));
-
-vi.mock('vscode', async () =>
-  (await import('./helpers/vscodeStub.js')).createVscodeStub(configStore),
-);
+vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
 
 vi.mock('../../src/core/scanner', () => ({
   scanForRepos: vi.fn(() =>
@@ -20,28 +16,22 @@ import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider } from '../../src/ext/treeProvider';
 import { fakeMemento } from './helpers/memento';
+import { makeGitState } from './helpers/repoFixture';
+import { stubState as state } from './helpers/vscodeStub';
 
-const STATE: GitState = {
-  branch: 'main',
-  detached: false,
-  changes: 0,
-  untracked: 0,
-  ahead: 0,
-  behind: 0,
-  hasUpstream: false,
-};
+const STATE: GitState = makeGitState({ hasUpstream: false });
 
 /** Queues one loadGitStates outcome: a state, a timeout, or a plain failure. */
-function nextGitLoad(state: GitState | undefined, timedOut: boolean) {
+function nextGitLoad(gitState: GitState | undefined, timedOut: boolean) {
   vi.mocked(loadGitStates).mockImplementationOnce((paths, onResult) => {
-    for (const repoPath of paths) onResult(repoPath, state, timedOut);
+    for (const repoPath of paths) onResult(repoPath, gitState, timedOut);
     return Promise.resolve({ gitMissing: false });
   });
 }
 
 describe('RepoTreeProvider on transient git failures', () => {
   it('keeps the last known state on a timeout, drops it on a real failure', async () => {
-    configStore.set('directories', ['/root']);
+    state.config.set('directories', ['/root']);
     const provider = new RepoTreeProvider(
       new RecencyStore(fakeMemento()),
       new PinStore(fakeMemento()),
