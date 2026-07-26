@@ -81,7 +81,7 @@ describe('RepoDock', () => {
   it('discovers the fixture repositories', () => {
     const rels = api
       .getRepos()
-      .map((r) => r.relPath)
+      .map((repo) => repo.relPath)
       .sort();
     assert.deepStrictEqual(rels, ['alpha', 'group/sub/beta']);
   });
@@ -153,6 +153,6 @@ describe('RepoDock', () => {
   it('rescans when directories change', async () => {
     await makeGitRepo(path.join(fixture, 'gamma'));
     await api.refresh();
-    assert.ok(api.getRepos().some((r) => r.relPath === 'gamma'));
+    assert.ok(api.getRepos().some((repo) => repo.relPath === 'gamma'));
   });
 });

@@ -4,8 +4,10 @@ import * as path from 'node:path';
 import { createLimiter } from './limit';
 import type { RepoInfo, ScanOptions } from './types';
 
-const readdirLimit = createLimiter(16);
+const MAX_CONCURRENT_READDIR = 16;
 const READDIR_TIMEOUT_MS = 15_000;
+
+const readdirLimit = createLimiter(MAX_CONCURRENT_READDIR);
 
 /** readdir that gives up after a timeout, since a dead network mount can hang forever. */
 function readdirWithTimeout(dir: string): Promise<Dirent[]> {
@@ -45,7 +47,7 @@ export async function scanForRepos(root: string, options: ScanOptions): Promise<
     }
 
     let repoHere = parentRepoPath;
-    if (entries.some((e) => e.name === '.git')) {
+    if (entries.some((entry) => entry.name === '.git')) {
       repos.push({
         name: path.basename(dir),
         path: dir,
@@ -61,9 +63,15 @@ export async function scanForRepos(root: string, options: ScanOptions): Promise<
     }
 
     const subdirs = entries.filter(
-      (e) => e.isDirectory() && !e.isSymbolicLink() && e.name !== '.git' && !excluded.has(e.name),
+      (entry) =>
+        entry.isDirectory() &&
+        !entry.isSymbolicLink() &&
+        entry.name !== '.git' &&
+        !excluded.has(entry.name),
     );
-    await Promise.all(subdirs.map((e) => walk(path.join(dir, e.name), depth + 1, repoHere)));
+    await Promise.all(
+      subdirs.map((entry) => walk(path.join(dir, entry.name), depth + 1, repoHere)),
+    );
   };
 
   await walk(base, 0);

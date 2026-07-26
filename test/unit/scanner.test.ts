@@ -39,7 +39,7 @@ describe('scanForRepos', () => {
       maxDepth: 4,
       exclude: ['node_modules'],
     });
-    const rels = repos.map((r) => r.relPath).sort();
+    const rels = repos.map((repo) => repo.relPath).sort();
     expect(rels).toEqual([
       'clients/acme/api',
       'clients/acme/website',
@@ -51,41 +51,41 @@ describe('scanForRepos', () => {
 
   it('marks repos found inside another repo with parentRepoPath', async () => {
     const repos = await scanForRepos(root, { maxDepth: 4, exclude: [] });
-    const nested = repos.find((r) => r.relPath === 'todo/vendor/theme');
+    const nested = repos.find((repo) => repo.relPath === 'todo/vendor/theme');
     expect(nested?.parentRepoPath).toBe(path.join(root, 'todo'));
-    const top = repos.find((r) => r.relPath === 'todo');
+    const top = repos.find((repo) => repo.relPath === 'todo');
     expect(top?.parentRepoPath).toBeUndefined();
   });
 
   it('treats the scan root itself as a repo when it contains .git', async () => {
     const repoRoot = path.join(root, 'todo');
     const repos = await scanForRepos(repoRoot, { maxDepth: 4, exclude: [] });
-    const self = repos.find((r) => r.relPath === '');
+    const self = repos.find((repo) => repo.relPath === '');
     expect(self?.name).toBe('todo');
     expect(self?.path).toBe(repoRoot);
   });
 
   it('respects maxDepth', async () => {
     const repos = await scanForRepos(root, { maxDepth: 2, exclude: [] });
-    expect(repos.map((r) => r.relPath)).not.toContain('clients/acme/website');
-    expect(repos.map((r) => r.relPath)).toContain('todo');
+    expect(repos.map((repo) => repo.relPath)).not.toContain('clients/acme/website');
+    expect(repos.map((repo) => repo.relPath)).toContain('todo');
   });
 
   it('finds repos sitting exactly at maxDepth', async () => {
     const repos = await scanForRepos(root, { maxDepth: 3, exclude: ['node_modules'] });
-    expect(repos.map((r) => r.relPath)).toContain('clients/acme/website');
+    expect(repos.map((repo) => repo.relPath)).toContain('clients/acme/website');
   });
 
   it('handles a trailing separator on the root path', async () => {
     const repos = await scanForRepos(root + path.sep, { maxDepth: 4, exclude: ['node_modules'] });
-    expect(repos.map((r) => r.relPath).sort()).toEqual([
+    expect(repos.map((repo) => repo.relPath).sort()).toEqual([
       'clients/acme/api',
       'clients/acme/website',
       'todo',
       'todo/vendor/theme',
       'worktree-repo',
     ]);
-    expect(repos.every((r) => r.root === root)).toBe(true);
+    expect(repos.every((repo) => repo.root === root)).toBe(true);
   });
 
   it('records the nearest ancestor for repos nested more than one level deep', async () => {
@@ -95,7 +95,7 @@ describe('scanForRepos', () => {
       await fs.mkdir(path.join(dir, 'a', 'b', '.git'), { recursive: true });
       await fs.mkdir(path.join(dir, 'a', 'b', 'c', '.git'), { recursive: true });
       const repos = await scanForRepos(dir, { maxDepth: 4, exclude: [] });
-      const byRel = new Map(repos.map((r) => [r.relPath, r]));
+      const byRel = new Map(repos.map((repo) => [repo.relPath, repo]));
       expect(byRel.get('a')?.parentRepoPath).toBeUndefined();
       expect(byRel.get('a/b')?.parentRepoPath).toBe(path.join(dir, 'a'));
       expect(byRel.get('a/b/c')?.parentRepoPath).toBe(path.join(dir, 'a', 'b'));

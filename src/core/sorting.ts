@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { canonicalPathKey } from './paths';
 import type { RepoInfo } from './types';
 
+/** Matches the allowed values of the `repodock.sortOrder` setting. */
 export type SortOrder = 'recent' | 'alphabetical';
 
 /**
@@ -9,8 +10,8 @@ export type SortOrder = 'recent' | 'alphabetical';
  * ("abc/" for abc/ginkgo). Empty for top-level repos and the root itself.
  */
 export function repoPrefix(repo: RepoInfo): string {
-  const i = repo.relPath.lastIndexOf('/');
-  return i === -1 ? '' : repo.relPath.slice(0, i + 1);
+  const lastSlash = repo.relPath.lastIndexOf('/');
+  return lastSlash === -1 ? '' : repo.relPath.slice(0, lastSlash + 1);
 }
 
 /**
@@ -32,10 +33,13 @@ export function filterHiddenRepos(repos: RepoInfo[], hiddenPaths: Iterable<strin
   const hidden = [...hiddenPaths].map(canonicalPathKey);
   if (hidden.length === 0) return repos;
   // Windows accepts '/' as a separator too; on POSIX a backslash is a filename character
-  const seps = path.sep === '\\' ? [path.sep, '/'] : [path.sep];
+  const separators = path.sep === '\\' ? [path.sep, '/'] : [path.sep];
   return repos.filter((repo) => {
     const key = canonicalPathKey(repo.path);
-    return !hidden.some((h) => key === h || seps.some((sep) => key.startsWith(h + sep)));
+    return !hidden.some(
+      (hiddenKey) =>
+        key === hiddenKey || separators.some((separator) => key.startsWith(hiddenKey + separator)),
+    );
   });
 }
 
@@ -76,6 +80,7 @@ export function sameRepoList(a: readonly RepoInfo[], b: readonly RepoInfo[]): bo
   );
 }
 
+/** The repos found under one scan root, rendered as a collapsible section when grouping is on. */
 export interface RepoGroup {
   /** Absolute path of the scan root, as carried by the repos in the group. */
   root: string;
@@ -120,18 +125,23 @@ export function sortRepos(
 ): RepoInfo[] {
   const byName = (a: RepoInfo, b: RepoInfo) =>
     a.name.localeCompare(b.name) || a.relPath.localeCompare(b.relPath);
-  const openedAt = (r: RepoInfo) => recency.get(canonicalPathKey(r.path)) ?? 0;
-  const cmp =
+  const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path)) ?? 0;
+  const compare =
     order === 'recent'
       ? (a: RepoInfo, b: RepoInfo) => openedAt(b) - openedAt(a) || byName(a, b)
       : byName;
-  const sorted = repos.slice().sort(cmp);
+  const sorted = repos.slice().sort(compare);
   return [
-    ...sorted.filter((r) => pinned.has(canonicalPathKey(r.path))),
-    ...sorted.filter((r) => !pinned.has(canonicalPathKey(r.path))),
+    ...sorted.filter((repo) => pinned.has(canonicalPathKey(repo.path))),
+    ...sorted.filter((repo) => !pinned.has(canonicalPathKey(repo.path))),
   ];
 }
 
+/**
+ * Splits an age into the largest unit that still reads naturally: under a minute is 'now',
+ * then minutes, hours and days, weeks up to a month, months up to a year, then years.
+ * Months and years approximate (30- and 365-day), which is close enough for "last opened".
+ */
 function relativeTimeParts(
   timestamp: number,
   now: number,

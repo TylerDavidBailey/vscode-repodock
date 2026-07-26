@@ -17,6 +17,7 @@ import type { PinStore } from './pins';
 import type { RecencyStore } from './recency';
 import { getConfig, tildify } from './settings';
 
+/** Marks a tree row's resourceUri as the current repo, which is all the decoration matches on. */
 export const CURRENT_REPO_SCHEME = 'repodock-current';
 
 /** Focus/visibility events can fire in bursts; don't re-run git more often than this. */
@@ -33,6 +34,11 @@ export class CurrentRepoDecorationProvider implements vscode.FileDecorationProvi
   }
 }
 
+/**
+ * A repository row. Identity matters: TreeView.reveal only accepts an element the provider
+ * handed out, so every rendered row is recorded in `repoElements` and `findRepoElement`
+ * returns that same instance.
+ */
 export interface TreeElement {
   repo: RepoInfo;
   label: string;
@@ -46,12 +52,20 @@ export interface FolderElement {
   repos: RepoInfo[];
 }
 
+/** Either row type the tree can hold; narrow with `isRepoElement`. */
 export type TreeNode = TreeElement | FolderElement;
 
 function isRepoElement(node: TreeNode): node is TreeElement {
   return 'repo' in node;
 }
 
+/**
+ * Backs the RepoDock view: holds the scanned repo list and its git state, and renders both
+ * as either a flat list or one section per scan folder.
+ *
+ * Refreshes are numbered by `refreshGeneration` so a slow scan or git load that has been
+ * superseded discards its results instead of overwriting newer ones.
+ */
 export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private readonly changeEmitter = new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this.changeEmitter.event;
@@ -104,7 +118,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     // existing tree untouched; only git state updates flow through, per element
     if (!sameRepoList(repos, this.repos)) {
       this.repos = repos;
-      const alive = new Set(repos.map((r) => r.path));
+      const alive = new Set(repos.map((repo) => repo.path));
       for (const repoPath of [...this.gitStates.keys()]) {
         if (!alive.has(repoPath)) this.gitStates.delete(repoPath);
       }
@@ -138,7 +152,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private async loadGit(generation: number): Promise<void> {
     this.lastGitLoad = Date.now();
     const { gitMissing } = await loadGitStates(
-      [...new Set(this.repos.map((r) => r.path))],
+      [...new Set(this.repos.map((repo) => repo.path))],
       (repoPath, state, timedOut) => {
         if (generation !== this.refreshGeneration) return;
         if (state) {
@@ -177,7 +191,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     if (node) {
       return isRepoElement(node) ? [] : this.sortedRepoElements(node.repos);
     }
-    // full re-render: previously handed-out elements are obsolete
+    // a root request is a full re-render, so drop the elements handed out last time
     this.repoElements.clear();
     this.folderElements.clear();
     return this.folderGrouping() ?? this.sortedRepoElements(this.visibleRepos());
@@ -237,7 +251,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   findRepoElement(repoPath: string): TreeElement | undefined {
     const cached = this.repoElements.get(repoPath);
     if (cached) return cached;
-    const repo = this.repos.find((r) => r.path === repoPath);
+    const repo = this.repos.find((candidate) => candidate.path === repoPath);
     return repo && this.repoElement(repo);
   }
 
@@ -305,30 +319,30 @@ function repoTooltip(
 ): vscode.MarkdownString {
   // repo names, paths, and branch names come from the filesystem; append them as
   // text so markdown in them can't inject formatting or links into the tooltip
-  const md = new vscode.MarkdownString();
-  md.appendMarkdown('**');
-  md.appendText(repo.name);
+  const tooltip = new vscode.MarkdownString();
+  tooltip.appendMarkdown('**');
+  tooltip.appendText(repo.name);
   const flags = [isCurrent ? 'open in this window' : '', isPinned ? 'pinned' : '']
     .filter(Boolean)
     .join(', ');
-  md.appendMarkdown(`**${flags ? ` — ${flags}` : ''}\n\n`);
-  md.appendText(tildify(repo.path));
+  tooltip.appendMarkdown(`**${flags ? ` — ${flags}` : ''}\n\n`);
+  tooltip.appendText(tildify(repo.path));
   if (state) {
-    md.appendMarkdown('\n\nBranch: ');
-    md.appendText(state.branch);
-    md.appendMarkdown(`${state.detached ? ' (detached)' : ''}  \n`);
+    tooltip.appendMarkdown('\n\nBranch: ');
+    tooltip.appendText(state.branch);
+    tooltip.appendMarkdown(`${state.detached ? ' (detached)' : ''}  \n`);
     const dirty = state.changes + state.untracked;
-    md.appendMarkdown(
+    tooltip.appendMarkdown(
       dirty > 0
         ? `Changes: ${state.changes} modified, ${state.untracked} untracked`
         : 'Working tree clean',
     );
     if (state.hasUpstream) {
-      md.appendMarkdown(`  \nUpstream: ${state.ahead} ahead, ${state.behind} behind`);
+      tooltip.appendMarkdown(`  \nUpstream: ${state.ahead} ahead, ${state.behind} behind`);
     }
   }
   if (openedAt !== undefined) {
-    md.appendMarkdown(`\n\nLast opened: ${formatRelativeTime(openedAt)}`);
+    tooltip.appendMarkdown(`\n\nLast opened: ${formatRelativeTime(openedAt)}`);
   }
-  return md;
+  return tooltip;
 }

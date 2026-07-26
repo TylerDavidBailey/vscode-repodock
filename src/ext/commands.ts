@@ -27,6 +27,12 @@ function repoOf(element: TreeElement | undefined): RepoInfo | undefined {
   return element?.repo;
 }
 
+/**
+ * Registers every `repodock.*` command. Which of them appear on a row's context menu is
+ * decided in `package.json` by matching the `contextValue` set in `treeProvider.ts`
+ * (`repo`/`repoNested`, with a `-pinned` suffix) — so adding a command here is only half
+ * the job. Commands invoked from a menu receive the clicked tree element as their argument.
+ */
 export function registerCommands(context: vscode.ExtensionContext, deps: CommandDeps): void {
   const { provider, recency, pins, refresh } = deps;
 
@@ -120,9 +126,9 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
         vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(repo.path)),
       ),
     ),
-    // updating the setting triggers the configuration listener, which rescans
     vscode.commands.registerCommand(
       'repodock.hideRepo',
+      // no explicit refresh: the settings write triggers the configuration listener, which rescans
       withRepo((repo) => hideRepo(repo.path)),
     ),
     vscode.commands.registerCommand('repodock.unhideAll', () => unhideAllRepos()),

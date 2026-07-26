@@ -1,47 +1,152 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { GitState } from '../../src/core/types';
-import { describeRepo } from '../../src/ext/treeProvider';
+import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// treeProvider.ts imports the vscode module at the top level; describeRepo never touches it.
-vi.mock('vscode', () => ({}));
+const { configStore } = vi.hoisted(() => ({ configStore: new Map<string, unknown>() }));
 
-function state(overrides: Partial<GitState> = {}): GitState {
-  return {
-    branch: 'main',
-    detached: false,
-    changes: 0,
-    untracked: 0,
-    ahead: 0,
-    behind: 0,
-    hasUpstream: true,
-    ...overrides,
-  };
-}
+vi.mock('vscode', async () =>
+  (await import('./helpers/vscodeStub.js')).createVscodeStub(configStore),
+);
 
-describe('describeRepo', () => {
-  it('shows just the branch for a clean, in-sync repo', () => {
-    expect(describeRepo(state())).toBe('main');
+import * as vscode from 'vscode';
+import { PinStore } from '../../src/ext/pins';
+import { RecencyStore } from '../../src/ext/recency';
+import { RepoTreeProvider, type TreeNode } from '../../src/ext/treeProvider';
+import { fakeMemento } from './helpers/memento';
+
+let rootA: string;
+let alpha: string;
+let beta: string;
+let provider: RepoTreeProvider;
+let recency: RecencyStore;
+let pins: PinStore;
+
+const labels = (rows: TreeNode[]) => rows.map((row) => row.label);
+
+beforeAll(async () => {
+  rootA = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-tp-'));
+  alpha = path.join(rootA, 'alpha');
+  beta = path.join(rootA, 'sub', 'beta');
+  await fs.mkdir(alpha, { recursive: true });
+  await fs.mkdir(beta, { recursive: true });
+  execFileSync('git', ['init', '-b', 'main', alpha]);
+  execFileSync('git', ['init', '-b', 'main', beta]);
+  await fs.writeFile(path.join(beta, 'untracked.txt'), 'dirty\n'); // beta is dirty
+
+  // overlapping scan roots on purpose: beta is found by both
+  configStore.set('directories', [rootA, path.join(rootA, 'sub')]);
+  recency = new RecencyStore(fakeMemento());
+  pins = new PinStore(fakeMemento());
+  provider = new RepoTreeProvider(recency, pins);
+});
+
+afterAll(async () => {
+  await fs.rm(rootA, { recursive: true, force: true });
+});
+
+// these tests run in order and share one provider, mirroring a live session
+describe('RepoTreeProvider', () => {
+  it('scans overlapping roots and loads git state per unique repo', async () => {
+    await provider.refresh();
+    const paths = provider.getRepos().map((repo) => repo.path);
+    expect(paths).toHaveLength(3); // beta is listed under both roots
+    expect(new Set(paths).size).toBe(2);
+    expect(provider.getGitStates().get(alpha)?.branch).toBe('main');
+    expect(provider.getGitStates().get(beta)?.untracked).toBe(1);
   });
 
-  it('keeps dirty and ahead/behind counts out of the row (they live in the tooltip)', () => {
-    expect(describeRepo(state({ changes: 2, untracked: 1, ahead: 2, behind: 1 }))).toBe('main');
+  it('renders one flat row per unique repo, keeping the shortest relative path', () => {
+    const rows = provider.getChildren();
+    expect(labels(rows)).toEqual(['alpha', 'beta']);
+    // beta is "sub/beta" under rootA but "beta" under rootA/sub; the short one wins,
+    // so no folder prefix appears in its description
+    const beta = rows[1];
+    expect(beta && 'repo' in beta ? beta.repo.relPath : undefined).toBe('beta');
   });
 
-  it('marks detached heads', () => {
-    expect(describeRepo(state({ branch: 'abc1234', detached: true }))).toBe('abc1234 (detached)');
+  it('sorts by recency, or by label when configured', async () => {
+    await recency.touch(beta);
+    try {
+      expect(labels(provider.getChildren())).toEqual(['beta', 'alpha']);
+      configStore.set('sortOrder', 'alphabetical');
+      expect(labels(provider.getChildren())).toEqual(['alpha', 'beta']);
+    } finally {
+      configStore.delete('sortOrder');
+      await recency.touch(alpha); // leave alpha most recent for later tests
+    }
   });
 
-  it('appends the last-opened time after the git summary', () => {
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    expect(describeRepo(state(), fiveMinutesAgo)).toBe('main · 5m');
+  it('floats pinned repos to the top and marks them with a pin icon', async () => {
+    // alpha is most recent, so pinning beta must lift it above alpha
+    await pins.toggle(beta);
+    try {
+      const rows = provider.getChildren();
+      expect(labels(rows)).toEqual(['beta', 'alpha']);
+      const icons = rows.map((row) => (provider.getTreeItem(row).iconPath as { id: string }).id);
+      expect(icons).toEqual(['pinned', 'source-control']);
+    } finally {
+      await pins.toggle(beta);
+    }
   });
 
-  it('falls back to the timestamp alone when git state is missing', () => {
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    expect(describeRepo(undefined, fiveMinutesAgo)).toBe('5m');
+  it('groups repos into one section per folder when groupByFolder is set', () => {
+    configStore.set('groupByFolder', true);
+    try {
+      const sections = provider.getChildren();
+      // sections follow the configured folder order, one per scan root
+      expect(labels(sections)).toEqual([rootA, path.join(rootA, 'sub')]);
+      const [outer, inner] = sections;
+      if (!outer || !inner) throw new Error('expected two folder sections');
+      // beta is found by both overlapping roots; after dedupe it appears only
+      // in the inner (more specific) folder's section
+      expect(labels(provider.getChildren(outer))).toEqual(['alpha']);
+      const innerRows = provider.getChildren(inner);
+      expect(labels(innerRows)).toEqual(['beta']);
+      // reveal support: repo rows report their section as parent
+      expect(innerRows[0] && provider.getParent(innerRows[0])).toBe(inner);
+      const item = provider.getTreeItem(inner);
+      expect(item.collapsibleState).toBe(2); // Expanded
+      expect(item.description).toBe('1');
+    } finally {
+      configStore.delete('groupByFolder');
+    }
   });
 
-  it('returns an empty description with no state and no timestamp', () => {
-    expect(describeRepo(undefined)).toBe('');
+  it('falls back to the flat list when grouping is on but only one folder is configured', async () => {
+    configStore.set('groupByFolder', true);
+    configStore.set('directories', [rootA]);
+    try {
+      await provider.refresh();
+      // beta is now only found via rootA, so it carries its folder prefix again
+      expect(labels(provider.getChildren())).toEqual(['alpha', 'beta (sub)']);
+    } finally {
+      configStore.set('directories', [rootA, path.join(rootA, 'sub')]);
+      configStore.delete('groupByFolder');
+      await provider.refresh();
+    }
+  });
+
+  it('prunes git state for repos that disappear from disk', async () => {
+    await fs.rm(alpha, { recursive: true, force: true });
+    await provider.refresh();
+    expect(provider.getRepos().some((repo) => repo.path === alpha)).toBe(false);
+    expect(provider.getGitStates().has(alpha)).toBe(false);
+    expect(provider.getGitStates().has(beta)).toBe(true);
+  });
+
+  it('warns exactly once when the git executable is missing', async () => {
+    const warn = vi.mocked(vscode.window.showWarningMessage);
+    const oldPath = process.env.PATH;
+    process.env.PATH = ''; // git can no longer be found
+    try {
+      await provider.refresh();
+      expect(warn).toHaveBeenCalledTimes(1);
+      await provider.refresh(); // second failure must not nag again
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      process.env.PATH = oldPath;
+    }
   });
 });

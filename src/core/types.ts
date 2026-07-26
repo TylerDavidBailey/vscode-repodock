@@ -14,12 +14,14 @@ export interface RepoInfo {
 export interface GitState {
   /** Branch name, or the short commit hash when detached. */
   branch: string;
+  /** True when HEAD points at a commit rather than a branch. */
   detached: boolean;
-  /** Staged, unstaged, renamed, and conflicted paths. */
+  /** Number of tracked files that are staged, unstaged, renamed, or conflicted. */
   changes: number;
   untracked: number;
   ahead: number;
   behind: number;
+  /** False when the branch has no remote tracking branch, making `ahead`/`behind` meaningless. */
   hasUpstream: boolean;
 }
 
