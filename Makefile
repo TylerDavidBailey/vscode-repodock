@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install build watch typecheck lint format test test-unit test-integration package install-local uninstall-local icon clean
+.PHONY: help install build watch typecheck lint format test test-unit test-coverage test-integration package install-local uninstall-local icon clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "} {printf "%-18s %s\n", $$1, $$2}'
@@ -23,8 +23,11 @@ lint: ## eslint + prettier check
 format: ## Format everything with prettier
 	npm run format
 
-test-unit: ## Vitest unit tests for src/core
+test-unit: ## Vitest unit tests for src/core and src/ext
 	npm run test:unit
+
+test-coverage: ## Unit tests with a v8 coverage report and enforced thresholds
+	npm run test:coverage
 
 test-integration: ## Integration tests in a real VS Code instance
 	npm run test:integration
@@ -44,4 +47,4 @@ icon: ## Regenerate media/icon.png
 	npm run make-icon
 
 clean: ## Remove build and test output
-	rm -rf dist out .vscode-test *.vsix
+	rm -rf dist out coverage .vscode-test *.vsix

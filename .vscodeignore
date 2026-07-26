@@ -4,6 +4,7 @@
 src/**
 test/**
 out/**
+coverage/**
 node_modules/**
 scripts/**
 .github/**
