@@ -12,6 +12,9 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "isolatedModules": true,
+    // contributes.test.ts imports package.json; without this it lands as `any` and every
+    // access to it trips the type-aware lint rules
+    "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,

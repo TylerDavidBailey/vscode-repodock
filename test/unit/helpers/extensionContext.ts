@@ -12,10 +12,16 @@ export interface FakeExtensionContext {
   workspaceState: vscode.Memento;
 }
 
-export function fakeExtensionContext(): FakeExtensionContext {
-  return {
+/**
+ * Typed as a full `ExtensionContext` so callers need no cast, though only the three members
+ * above exist. Anything else `activate` starts touching will fail loudly at runtime rather
+ * than being silently absent.
+ */
+export function fakeExtensionContext(): vscode.ExtensionContext {
+  const context: FakeExtensionContext = {
     subscriptions: [],
     globalState: Object.assign(fakeMemento(), { setKeysForSync: () => undefined }),
     workspaceState: fakeMemento(),
   };
+  return context as vscode.ExtensionContext;
 }
