@@ -5,8 +5,12 @@ import {
   addDirectories,
   expandPath,
   getConfig,
+  hideRepo,
   removeDirectory,
+  setGroupByFolder,
+  setSortOrder,
   tildify,
+  unhideAllRepos,
 } from '../../src/ext/settings';
 import { stubState as state } from './helpers/vscodeStub';
 
@@ -118,5 +122,55 @@ describe('removeDirectory', () => {
     configStore.set('directories', ['~/code', path.join(home, 'code'), '~/other']);
     await removeDirectory(path.join(home, 'code'));
     expect(configStore.get('directories')).toEqual(['~/other']);
+  });
+
+  it('leaves the list alone when the path is not configured', async () => {
+    configStore.set('directories', ['~/code']);
+    await removeDirectory(path.join(home, 'elsewhere'));
+    expect(configStore.get('directories')).toEqual(['~/code']);
+  });
+});
+
+describe('hideRepo', () => {
+  it('appends the repo tildified', async () => {
+    await hideRepo(path.join(home, 'code', 'alpha'));
+    expect(configStore.get('hiddenRepos')).toEqual(['~' + path.sep + path.join('code', 'alpha')]);
+  });
+
+  it('keeps repos hidden earlier', async () => {
+    configStore.set('hiddenRepos', ['~/code/alpha']);
+    await hideRepo(path.join(home, 'code', 'beta'));
+    expect(configStore.get('hiddenRepos')).toHaveLength(2);
+  });
+
+  it('does nothing when the repo is already hidden in another form', async () => {
+    configStore.set('hiddenRepos', ['~/code/alpha']);
+    await hideRepo(path.join(home, 'code', 'alpha'));
+    expect(configStore.get('hiddenRepos')).toEqual(['~/code/alpha']);
+  });
+});
+
+describe('unhideAllRepos', () => {
+  it('clears the setting rather than writing an empty list', async () => {
+    configStore.set('hiddenRepos', ['~/code/alpha']);
+    await unhideAllRepos();
+    // undefined resets to the package.json default instead of shadowing it
+    expect(configStore.has('hiddenRepos')).toBe(false);
+  });
+});
+
+describe('view-state writers', () => {
+  it('sets each sort order', async () => {
+    await setSortOrder('alphabetical');
+    expect(configStore.get('sortOrder')).toBe('alphabetical');
+    await setSortOrder('recent');
+    expect(configStore.get('sortOrder')).toBe('recent');
+  });
+
+  it('sets grouping on and off', async () => {
+    await setGroupByFolder(true);
+    expect(configStore.get('groupByFolder')).toBe(true);
+    await setGroupByFolder(false);
+    expect(configStore.get('groupByFolder')).toBe(false);
   });
 });

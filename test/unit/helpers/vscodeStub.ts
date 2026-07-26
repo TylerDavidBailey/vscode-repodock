@@ -213,8 +213,13 @@ export function createVscodeStub(state: StubState = stubState) {
   // accumulates into `value` so tooltip tests can assert the rendered markdown
   class MarkdownString {
     value = '';
+    /**
+     * Escapes markdown syntax the way the real `appendText` does. Without this a test
+     * could not tell `appendText` from `appendMarkdown`, which is the whole point of the
+     * tooltip's handling of repo and branch names taken off disk.
+     */
     appendText(text: string) {
-      this.value += text;
+      this.value += text.replace(/[\\`*_{}[\]()#+\-.!]/g, '\\$&').replace(/\n/g, '\n\n');
       return this;
     }
     appendMarkdown(text: string) {

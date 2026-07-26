@@ -91,6 +91,47 @@ describe('parsePorcelainV2', () => {
     expect(state.untracked).toBe(1);
   });
 
+  it('counts unmerged and renamed entries as changes', () => {
+    const state = parsePorcelainV2(
+      [
+        '# branch.head main',
+        // a rename is a `2` record, a conflict a `u` record; both are tracked changes
+        '2 R. N... 100644 100644 100644 aaa bbb R100 new.txt\told.txt',
+        'u UU N... 100644 100644 100644 100644 aaa bbb ccc conflict.txt',
+        '1 .M N... 100644 100644 100644 aaa bbb edited.txt',
+      ].join('\n'),
+    );
+    expect(state.changes).toBe(3);
+    expect(state.untracked).toBe(0);
+  });
+
+  it('keeps a branch name containing spaces intact', () => {
+    // git allows spaces in branch names, and slicing the header must not split on them
+    expect(parsePorcelainV2('# branch.head feature/my branch').branch).toBe('feature/my branch');
+  });
+
+  it('ignores header lines it does not recognize', () => {
+    const state = parsePorcelainV2(
+      ['# branch.head main', '# stash 2', '# something.new value'].join('\n'),
+    );
+    expect(state.branch).toBe('main');
+    expect(state.changes).toBe(0);
+  });
+
+  it('leaves hasUpstream false when the ahead/behind header is malformed', () => {
+    const state = parsePorcelainV2(['# branch.head main', '# branch.ab garbage'].join('\n'));
+    expect(state.hasUpstream).toBe(false);
+    expect(state.ahead).toBe(0);
+    expect(state.behind).toBe(0);
+  });
+
+  it('does not mistake a file whose name starts with an entry letter for a record', () => {
+    // record lines are '1 ', '2 ', 'u ', '? ' — a bare word must not count
+    const state = parsePorcelainV2(['# branch.head main', 'untracked-looking-line'].join('\n'));
+    expect(state.changes).toBe(0);
+    expect(state.untracked).toBe(0);
+  });
+
   it('reports an in-sync upstream (+0 -0) as having an upstream', () => {
     const output = [
       '# branch.oid 4a1c9200a1c9200a1c9200a1c9200a1c9200a1c9',
