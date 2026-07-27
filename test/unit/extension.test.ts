@@ -205,6 +205,19 @@ describe('the current workspace', () => {
     expect(item.description).toBe('now');
   });
 
+  it('records the repo even when it is not the first workspace folder', async () => {
+    state.workspaceFolders = [
+      { uri: { fsPath: absPath('/somewhere/else') } },
+      { uri: { fsPath: alpha.path } },
+    ];
+    const api = await activateWithAlpha();
+
+    const item = api.provider.getTreeItem(
+      required(api.provider.findRepoElement(alpha.path), 'an element for alpha'),
+    );
+    expect(item.description).toBe('now');
+  });
+
   it('leaves recency alone when this window is not in a scanned repo', async () => {
     state.workspaceFolders = [{ uri: { fsPath: absPath('/somewhere/else') } }];
     const api = await activateWithAlpha();

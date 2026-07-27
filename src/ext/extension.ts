@@ -131,9 +131,11 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   };
 
   const initialScan = refreshWithProgress(provider).then(async () => {
-    // record the workspace we're sitting in so "recent" ordering knows about it
-    const currentPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const currentRepo = currentPath === undefined ? undefined : findRepoForPath(currentPath);
+    // record the workspace we're sitting in so "recent" ordering knows about it —
+    // the first workspace folder that is a scanned repo, same as `revealCurrent`
+    const currentRepo = workspacePaths()
+      .map(findRepoForPath)
+      .find((repo) => repo !== undefined);
     if (currentRepo) {
       // touch the scanned path, not the workspace's, so recency keys stay consistent
       await recency.touch(currentRepo.path);
