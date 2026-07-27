@@ -86,11 +86,13 @@ describe('opening a repository', () => {
 });
 
 describe('pinning', () => {
-  it('toggles a pin on and off again', async () => {
+  it('pins without ever unpinning', async () => {
+    // the menu only offers Pin on an unpinned row, but a stale contextValue or a
+    // programmatic executeCommand must not turn the command into an unpin
     await run('repodock.pinRepo', element);
     expect(pins.isPinned(repo.path)).toBe(true);
     await run('repodock.pinRepo', element);
-    expect(pins.isPinned(repo.path)).toBe(false);
+    expect(pins.isPinned(repo.path)).toBe(true);
   });
 
   it('unpins without ever pinning', async () => {
@@ -99,7 +101,7 @@ describe('pinning', () => {
     await run('repodock.unpinRepo', element);
     expect(pins.isPinned(repo.path)).toBe(false);
 
-    await pins.toggle(repo.path);
+    await pins.pin(repo.path);
     await run('repodock.unpinRepo', element);
     expect(pins.isPinned(repo.path)).toBe(false);
   });

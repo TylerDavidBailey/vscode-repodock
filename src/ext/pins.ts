@@ -18,21 +18,19 @@ export class PinStore {
     return this.all().has(canonicalPathKey(repoPath));
   }
 
-  async toggle(repoPath: string): Promise<void> {
+  /**
+   * Pins idempotently: the Pin command must never unpin, since its menu visibility
+   * depends on a `contextValue` that can be stale by the time it runs.
+   */
+  async pin(repoPath: string): Promise<void> {
     const pins = new Set(this.all());
     const key = canonicalPathKey(repoPath);
-    if (pins.has(key)) {
-      pins.delete(key);
-    } else {
-      pins.add(key);
-    }
+    if (pins.has(key)) return;
+    pins.add(key);
     await this.memento.update(KEY, [...pins]);
   }
 
-  /**
-   * Unpins without the toggle's other half: the Unpin command must never pin, since its
-   * menu visibility depends on a `contextValue` that can be stale by the time it runs.
-   */
+  /** Unpins idempotently, for the same reason `pin` never unpins. */
   async unpin(repoPath: string): Promise<void> {
     const pins = new Set(this.all());
     if (!pins.delete(canonicalPathKey(repoPath))) return;
