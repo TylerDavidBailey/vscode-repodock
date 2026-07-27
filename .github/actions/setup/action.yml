@@ -1,0 +1,15 @@
+name: Install dependencies
+description: Installs Node with an npm cache and runs npm ci. Run actions/checkout first.
+
+# Deliberately does not check out: a local composite action can only be resolved once the
+# repository is on disk, so every job runs actions/checkout itself and then calls this.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
+        cache: npm
+    - run: npm ci
+      shell: bash

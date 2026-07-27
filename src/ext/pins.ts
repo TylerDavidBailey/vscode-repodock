@@ -28,4 +28,14 @@ export class PinStore {
     }
     await this.memento.update(KEY, [...pins]);
   }
+
+  /**
+   * Unpins without the toggle's other half: the Unpin command must never pin, since its
+   * menu visibility depends on a `contextValue` that can be stale by the time it runs.
+   */
+  async unpin(repoPath: string): Promise<void> {
+    const pins = new Set(this.all());
+    if (!pins.delete(canonicalPathKey(repoPath))) return;
+    await this.memento.update(KEY, [...pins]);
+  }
 }

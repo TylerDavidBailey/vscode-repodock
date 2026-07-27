@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# A new push supersedes the one before it; each run downloads a full VS Code build
+# on three platforms, so letting them stack up is expensive for nothing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # release-please builds releases from squash-merge commit titles, so PR titles
   # must follow Conventional Commits
@@ -36,14 +42,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:unit
+
+  coverage:
+    name: Coverage thresholds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # one platform is enough: the thresholds are platform-independent, and v8
+      # instrumentation on all three would buy nothing
+      - run: npm run test:coverage
 
   integration:
     name: Integration tests (${{ matrix.os }})
@@ -54,11 +66,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/setup
+      # The VS Code build is ~150 MB per platform per run. Cache only the versioned
+      # download directory: .vscode-test also holds user-data, and caching that would
+      # freeze whatever global settings a killed run left behind.
+      - uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+          path: .vscode-test/vscode-*
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('.vscode-test.mjs') }}
+          restore-keys: vscode-test-${{ runner.os }}-
       - run: xvfb-run -a npm run test:integration
         if: runner.os == 'Linux'
       - run: npm run test:integration
@@ -67,16 +83,14 @@ jobs:
   package:
     name: Package VSIX
     runs-on: ubuntu-latest
-    needs: [checks]
+    # a VSIX must never be built off a red integration suite
+    needs: [checks, coverage, integration]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npm run package
       - uses: actions/upload-artifact@v7
         with:
           name: repodock-vsix
           path: '*.vsix'
+          retention-days: 14

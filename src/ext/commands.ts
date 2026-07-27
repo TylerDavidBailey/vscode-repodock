@@ -71,7 +71,7 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
     vscode.commands.registerCommand(
       'repodock.unpinRepo',
       withRepo(async (repo) => {
-        await pins.toggle(repo.path);
+        await pins.unpin(repo.path);
         provider.rebuild();
       }),
     ),

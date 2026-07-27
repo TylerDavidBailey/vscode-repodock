@@ -111,4 +111,40 @@ describe('scanForRepos', () => {
     });
     expect(repos).toEqual([]);
   });
+
+  it('treats a .git file as a repository, for worktrees and submodules', async () => {
+    const repos = await scanForRepos(root, { maxDepth: 4, exclude: ['node_modules'] });
+    const worktree = repos.find((repo) => repo.relPath === 'worktree-repo');
+    expect(worktree?.path).toBe(path.join(root, 'worktree-repo'));
+  });
+
+  it('terminates on a symlink cycle instead of recursing forever', async () => {
+    // 'loop' points back at the scan root; nothing may be reported through it
+    const repos = await scanForRepos(root, { maxDepth: 4, exclude: ['node_modules'] });
+    expect(repos.filter((repo) => repo.relPath.startsWith('loop'))).toEqual([]);
+  });
+
+  it('skips an excluded directory that is itself a repository', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-excl-'));
+    try {
+      await fs.mkdir(path.join(dir, 'vendor', '.git'), { recursive: true });
+      await fs.mkdir(path.join(dir, 'vendor', 'inner', '.git'), { recursive: true });
+      const repos = await scanForRepos(dir, { maxDepth: 4, exclude: ['vendor'] });
+      expect(repos).toEqual([]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports only the root itself at maxDepth 0', async () => {
+    const repoRoot = path.join(root, 'todo');
+    const repos = await scanForRepos(repoRoot, { maxDepth: 0, exclude: [] });
+    expect(repos.map((repo) => repo.relPath)).toEqual(['']);
+  });
+
+  it('returns repos ordered by path, so an unchanged rescan compares equal', async () => {
+    const repos = await scanForRepos(root, { maxDepth: 4, exclude: ['node_modules'] });
+    const paths = repos.map((repo) => repo.path);
+    expect(paths).toEqual([...paths].sort((a, b) => a.localeCompare(b)));
+  });
 });

@@ -95,6 +95,10 @@ describe('groupReposByRoot', () => {
     relPath,
   });
 
+  it('returns no groups for an empty repo list', () => {
+    expect(groupReposByRoot([], [ROOT, OTHER])).toEqual([]);
+  });
+
   it('splits repos into one group per root, in the configured folder order', () => {
     const repos = [makeOtherRepo('zeta'), makeRepo('alpha'), makeRepo('gamma')];
     const groups = groupReposByRoot(repos, [ROOT, OTHER]);
@@ -226,6 +230,19 @@ describe('filterHiddenRepos', () => {
   it('does not hide a sibling that merely shares the path prefix', () => {
     const repos = [makeRepo('outer'), makeRepo('out')];
     expect(filterHiddenRepos(repos, [`${ROOT}/out`]).map((repo) => repo.name)).toEqual(['outer']);
+  });
+
+  it('matches hidden entries case-insensitively on Windows', () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const repos: RepoInfo[] = [
+        { name: 'alpha', path: 'C:\\Code\\alpha', root: 'C:\\Code', relPath: 'alpha' },
+      ];
+      expect(filterHiddenRepos(repos, ['c:\\code\\alpha'])).toEqual([]);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
   });
 });
 
