@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.0...v1.1.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* unpin no longer re-pins an unpinned repository ([#13](https://github.com/TylerDavidBailey/vscode-repodock/issues/13)) ([8cebb24](https://github.com/TylerDavidBailey/vscode-repodock/commit/8cebb24476243be09c6e5035b9a712e2e06341d3))
+
 ## [1.1.0](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.0.1...v1.1.0) (2026-07-23)
 
 
