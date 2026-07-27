@@ -30,15 +30,26 @@ export interface RepoDockConfig {
 export function getConfig(): RepoDockConfig {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   return {
-    directories: dedupePaths(config.get<string[]>('directories', []).map(expandPath)),
+    directories: dedupePaths(
+      withoutBlankEntries(config.get<string[]>('directories', [])).map(expandPath),
+    ),
     maxDepth: config.get<number>('maxDepth', 4),
     exclude: config.get<string[]>('exclude', ['node_modules', 'bower_components', '.Trash']),
-    hiddenRepos: config.get<string[]>('hiddenRepos', []).map(expandPath),
+    hiddenRepos: withoutBlankEntries(config.get<string[]>('hiddenRepos', [])).map(expandPath),
     showNestedRepos: config.get<boolean>('showNestedRepos', true),
     sortOrder: config.get<SortOrder>('sortOrder', 'recent'),
     groupByFolder: config.get<boolean>('groupByFolder', false),
     openInNewWindow: config.get<boolean>('openInNewWindow', false),
   };
+}
+
+/**
+ * Drops blank entries before they reach `expandPath`: `expandPath('')` resolves to the
+ * process working directory, so a stray empty item in the settings UI would scan or
+ * hide an arbitrary tree.
+ */
+function withoutBlankEntries(paths: string[]): string[] {
+  return paths.filter((entry) => entry.trim() !== '');
 }
 
 function dedupePaths(paths: string[]): string[] {

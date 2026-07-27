@@ -101,6 +101,14 @@ describe('getConfig', () => {
     configStore.set('directories', ['~/code', path.join(home, 'code'), '~/code/']);
     expect(getConfig().directories).toEqual([path.join(home, 'code')]);
   });
+
+  it('drops blank entries instead of resolving them to the working directory', () => {
+    configStore.set('directories', ['', '   ', '~/code']);
+    configStore.set('hiddenRepos', ['']);
+    const config = getConfig();
+    expect(config.directories).toEqual([path.join(home, 'code')]);
+    expect(config.hiddenRepos).toEqual([]);
+  });
 });
 
 describe('addDirectories', () => {
