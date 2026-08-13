@@ -1,10 +1,11 @@
 name: Publish
 
-# Packages a tag and ships it: VSIX onto the GitHub release, then the Marketplace.
+# Packages a tag and ships it: VSIX onto the GitHub release, then the Marketplace and
+# Open VSX (the registry VSCodium and other non-Microsoft builds read).
 # release-please calls this after it creates a release; workflow_dispatch is the manual
 # path for a hand-pushed tag or a release whose publish step needs re-running. Both are
-# idempotent — `gh release upload --clobber` replaces the asset and `vsce publish` refuses
-# a version that already exists.
+# idempotent — `gh release upload --clobber` replaces the asset, and `vsce publish` and
+# `ovsx publish` both refuse a version that already exists.
 on:
   workflow_call:
     inputs:
@@ -15,6 +16,9 @@ on:
     secrets:
       VSCE_PAT:
         description: Marketplace personal access token. Publishing is skipped when unset.
+        required: false
+      OVSX_PAT:
+        description: Open VSX access token. Publishing is skipped when unset.
         required: false
   workflow_dispatch:
     inputs:
@@ -74,3 +78,12 @@ jobs:
             exit 0
           fi
           npx vsce publish --pat "$VSCE_PAT"
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "OVSX_PAT secret not set — skipping Open VSX publish."
+            exit 0
+          fi
+          npx ovsx publish ./*.vsix --pat "$OVSX_PAT"
