@@ -37,5 +37,6 @@ jobs:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets:
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
     permissions:
       contents: write

@@ -36,7 +36,7 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 
 Requires VS Code 1.96 or newer.
 
-1. Install [RepoDock from the Marketplace](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock), or run `code --install-extension tylerdavidbailey.repodock`.
+1. Install [RepoDock from the Marketplace](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock), or run `code --install-extension tylerdavidbailey.repodock`. On VSCodium and other non-Microsoft builds, install [from Open VSX](https://open-vsx.org/extension/tylerdavidbailey/repodock) or run `codium --install-extension tylerdavidbailey.repodock`.
 2. Open the RepoDock icon in the Activity Bar.
 3. Click **Add Folder** and pick the directory (or directories) where your repos live.
 4. Click any repo to open it, or focus the tree and type to filter.
