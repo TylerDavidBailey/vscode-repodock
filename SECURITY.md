@@ -2,21 +2,24 @@
 
 ## Supported versions
 
-Only the latest release on the VS Code Marketplace is supported with security fixes.
+Only the latest release gets security fixes. Each release ships at the same version to
+both the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock)
+and [Open VSX](https://open-vsx.org/extension/tylerdavidbailey/repodock), so upgrading on
+either registry gets you the fix.
 
-## Reporting a vulnerability
+## Report a vulnerability
 
-Please **do not open a public issue** for security problems. Use GitHub's private
-vulnerability reporting instead: go to the repository's **Security** tab →
-**Report a vulnerability**. You'll get a response within a few days.
+Do not open a public issue for a security problem. Use GitHub's private vulnerability
+reporting instead: open the repository's **Security** tab, then choose
+**Report a vulnerability**. You get a response within a few days.
 
 ## Design notes for reviewers
 
-- RepoDock makes no network requests and collects no telemetry; all data
-  (folder paths, last-opened timestamps) stays in VS Code's local storage.
-- The only external process it runs is `git status` via `execFile` (no shell) against
-  repositories found under folders the user explicitly configured.
+- RepoDock makes no network requests and collects no telemetry. It stores only folder
+  paths and last-opened timestamps, in VS Code's local storage.
+- The only external process it runs is `git status --porcelain=v2 --branch`, through
+  `execFile` with no shell, against repositories under the folders the user configured.
 - The published bundle has no runtime npm dependencies.
-- In Restricted Mode (untrusted workspaces), the `repodock.directories` and
-  `repodock.exclude` settings are ignored from workspace configuration, so a checked-out
-  repository cannot redirect scanning.
+- In Restricted Mode, which VS Code applies to an untrusted workspace, it ignores
+  `repodock.directories` and `repodock.exclude` when those settings come from workspace
+  configuration. A checked-out repository therefore cannot redirect scanning.

@@ -1,5 +1,5 @@
 <!--
-Title must follow Conventional Commits (releases are generated from it):
+The title must follow Conventional Commits, because releases are generated from it:
   feat: ... | fix: ... | docs: ... | ci: ... | chore: ... | feat!: breaking
 -->
 
@@ -9,8 +9,8 @@ Title must follow Conventional Commits (releases are generated from it):
 
 ## Why
 
-<!-- What problem does it solve? Link issues: Fixes #123 -->
+<!-- What problem does it solve? Link the issues: Fixes #123 -->
 
 ## Testing
 
-<!-- How was this verified? `make lint test` must pass; new behavior needs a test. -->
+<!-- How did you verify this? `make lint test` must pass, and new behavior needs a test. -->
