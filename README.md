@@ -1,12 +1,13 @@
 # RepoDock
 
 [![Marketplace](https://vsmarketplacebadges.dev/version/tylerdavidbailey.repodock.svg?label=marketplace)](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock)
+[![Open VSX](https://img.shields.io/open-vsx/v/tylerdavidbailey/repodock?label=open%20vsx)](https://open-vsx.org/extension/tylerdavidbailey/repodock)
 [![CI](https://github.com/TylerDavidBailey/vscode-repodock/actions/workflows/ci.yml/badge.svg)](https://github.com/TylerDavidBailey/vscode-repodock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Discover every git repository inside the folders you add and switch between them without leaving VS Code.
+Find every git repository inside the folders you add, and switch between them without leaving VS Code.
 
-RepoDock scans the folders you choose and lists every repo it finds in a sidebar, with live git status. Opening one takes a couple of keystrokes.
+RepoDock scans the folders you choose and lists every repo it finds in a sidebar, with live git status. Clicking a row opens that repo.
 
 ![RepoDock sidebar](docs/screenshot.png)
 
@@ -14,6 +15,7 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 
 - [Features](#features)
 - [Getting started](#getting-started)
+  - [Install](#install)
 - [Commands](#commands)
 - [Settings](#settings)
 - [Contributing](#contributing)
@@ -23,36 +25,52 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 ## Features
 
 - Finds every git repo in the folders you add, including repos inside other repos (submodules, vendored checkouts).
-- A real VS Code tree in the Activity Bar, one row per repo. Repos below a folder's top level show their parent directory in parentheses (`ginkgo (abc)`) so same-named repos stay distinct.
-- Each row shows its branch and when you last opened it. The tooltip adds changed and untracked counts plus ahead/behind. When the window regains focus, status reloads and folders are rescanned, so a repo cloned from a terminal shows up on its own.
-- Pin the repos you use daily to the top; hide the ones you never open.
-- The repo open in the current window is highlighted and revealed when the view opens.
-- Sort by most recently opened (compact `2h` timestamps) or alphabetically, from the title bar.
-- Optionally group the list into one section per scanned folder. A repo under two overlapping folders appears once, in the more specific one.
-- Focus the tree and type to filter.
-- No network access, no telemetry, and no runtime dependencies. Paths and timestamps stay in VS Code's local storage.
+- Renders a tree view in the Activity Bar, one row per repo. A repo below a folder's top level carries its path under that folder in parentheses (`ginkgo (abc)`), so same-named repos stay distinct.
+- Shows the branch and the time you last opened each repo. The tooltip adds changed and untracked counts plus ahead and behind.
+- Reloads git status and rescans the folders when the window regains focus, so a repo you cloned in a terminal appears without a manual refresh.
+- Pins the repos you use daily to the top. Hides the ones you never open.
+- Highlights the repo that is open in the current window, and reveals it when the view opens.
+- Sorts by most recently opened, with compact `2h` timestamps, or alphabetically. Both are in the title bar.
+- Groups the list into one section per scanned folder, if you turn grouping on. A repo under two overlapping folders appears once, in the more specific one.
+- Filters as you type once the tree has focus.
+- Makes no network requests, collects no telemetry, and ships no runtime dependencies. Paths and timestamps stay in VS Code's local storage.
 
 ## Getting started
 
-Requires VS Code 1.96 or newer.
+RepoDock requires VS Code 1.96 or newer.
 
-1. Install [RepoDock from the Marketplace](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock), or run `code --install-extension tylerdavidbailey.repodock`. On VSCodium and other non-Microsoft builds, install [from Open VSX](https://open-vsx.org/extension/tylerdavidbailey/repodock) or run `codium --install-extension tylerdavidbailey.repodock`.
-2. Open the RepoDock icon in the Activity Bar.
-3. Click **Add Folder** and pick the directory (or directories) where your repos live.
-4. Click any repo to open it, or focus the tree and type to filter.
+### Install
+
+Every release ships to both registries at the same version. Install from whichever one your
+editor reads.
+
+| Editor                                  | Registry                                                                                                   | Command                                                |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| VS Code                                 | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tylerdavidbailey.repodock) | `code --install-extension tylerdavidbailey.repodock`   |
+| VSCodium and other non-Microsoft builds | [Open VSX](https://open-vsx.org/extension/tylerdavidbailey/repodock)                                       | `codium --install-extension tylerdavidbailey.repodock` |
+
+To install without a registry, download the `.vsix` from any
+[GitHub release](https://github.com/TylerDavidBailey/vscode-repodock/releases) and run
+`code --install-extension repodock-<version>.vsix`.
+
+### Add your folders
+
+1. Open the RepoDock icon in the Activity Bar.
+2. Click **Add Folder** and pick the directory, or directories, where your repos live.
+3. Click any repo to open it. To narrow the list, focus the tree and type.
 
 ## Commands
 
-| Command                                                     | Description                                                             |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `RepoDock: Manage Folders`                                  | List scan folders, remove one, or add another (title-bar folder button) |
-| `RepoDock: Add Folder` / `Remove Folder`                    | The same, as direct commands                                            |
-| `RepoDock: Refresh`                                         | Rescan folders and reload git state                                     |
-| `RepoDock: Sort by Recently Opened` / `Sort Alphabetically` | Toggle the sort order                                                   |
-| `RepoDock: Group by Folder` / `Show Flat List`              | Toggle folder sections (shown when several folders are configured)      |
-| `RepoDock: Unhide All Repositories`                         | Clear the hidden-repo list                                              |
+| Command                                                    | Description                                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `RepoDock: Manage Folders`                                 | List scan folders, remove one, or add another (title-bar folder button)    |
+| `RepoDock: Add Folder`, `RepoDock: Remove Folder`          | Add or remove one scan folder directly                                     |
+| `RepoDock: Refresh`                                        | Rescan the folders and reload git state                                    |
+| `RepoDock: Sort by Recently Opened`, `Sort Alphabetically` | Set the sort order                                                         |
+| `RepoDock: Group by Folder`, `Show Flat List`              | Turn folder sections on or off (shown when several folders are configured) |
+| `RepoDock: Unhide All Repositories`                        | Clear the hidden-repo list                                                 |
 
-Repo rows also offer **Pin/Unpin**, **Open in Current Window** / **Open in New Window** (inline icon), **Add to Workspace**, **Open in Integrated Terminal**, **Reveal in Finder / File Explorer**, **Copy Path**, and **Hide Repository** via the context menu.
+The context menu on a repo row adds **Pin Repository** and **Unpin Repository**, **Open in Current Window**, **Open in New Window** (also an inline icon), **Add to Workspace**, **Open in Integrated Terminal**, **Copy Path**, and **Hide Repository**. It also adds **Reveal in Finder** on macOS, and **Reveal in File Explorer** on Windows and Linux.
 
 ## Settings
 
@@ -69,11 +87,11 @@ Repo rows also offer **Pin/Unpin**, **Open in Current Window** / **Open in New W
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, and the commit conventions releases are generated from.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, and the commit conventions that releases are generated from.
 
 ## Support
 
-[Open an issue](https://github.com/TylerDavidBailey/vscode-repodock/issues) for bugs and feature requests. For security problems, use the private process in [SECURITY.md](SECURITY.md) instead.
+[Open an issue](https://github.com/TylerDavidBailey/vscode-repodock/issues) for bugs and feature requests. For a security problem, use the private process in [SECURITY.md](SECURITY.md) instead.
 
 ## License
 
