@@ -131,6 +131,21 @@ describe('the configuration listener', () => {
     },
   );
 
+  it('both rescans and re-renders when one save touches a setting of each kind', async () => {
+    // VS Code fires a single event per settings save and affectsConfiguration answers for
+    // every key that changed in it. Testing the two lists with `else if` would drop the
+    // re-render here, because refresh() skips rebuilding when the repo list is unchanged.
+    const api = await activateWithAlpha();
+    const rebuild = vi.spyOn(api.provider, 'rebuild');
+    const scans = vi.mocked(scanForRepos).mock.calls.length;
+
+    await state.fireConfigChange('maxDepth', 'sortOrder');
+    await api.refresh();
+
+    expect(rebuild).toHaveBeenCalled();
+    expect(vi.mocked(scanForRepos).mock.calls.length).toBeGreaterThan(scans);
+  });
+
   it('ignores openInNewWindow, which is read live on each open', async () => {
     const api = await activateWithAlpha();
     const rebuild = vi.spyOn(api.provider, 'rebuild');
