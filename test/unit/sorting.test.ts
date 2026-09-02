@@ -84,6 +84,20 @@ describe('dedupeRepos', () => {
     const repos = [makeRepo('alpha'), makeRepo('beta')];
     expect(dedupeRepos(repos)).toEqual(repos);
   });
+
+  it('collapses paths differing only in case on a case-insensitive filesystem', () => {
+    // two roots can reach one repo through different casing; on macOS and Windows that
+    // is a single directory, so keying on the raw path would render it twice
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try {
+      const lower: RepoInfo = { name: 'api', path: '/code/api', root: '/code', relPath: 'api' };
+      const upper: RepoInfo = { name: 'api', path: '/Code/API', root: '/Code', relPath: 'api' };
+      expect(dedupeRepos([lower, upper])).toEqual([lower]);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
 });
 
 describe('groupReposByRoot', () => {
