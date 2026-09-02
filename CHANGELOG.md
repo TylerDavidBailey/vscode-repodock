@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.1...v1.1.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* correct path-case handling, settings refresh, and repo counts ([#28](https://github.com/TylerDavidBailey/vscode-repodock/issues/28)) ([c2e40a7](https://github.com/TylerDavidBailey/vscode-repodock/commit/c2e40a71240d7a9d344d7db316e3f4b5056e4f8e))
+
 ## [1.1.1](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.0...v1.1.1) (2026-07-27)
 
 
