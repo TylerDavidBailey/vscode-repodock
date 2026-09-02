@@ -330,7 +330,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Folders to scan for git repositories. Supports ~ for the home directory."
+          "description": "Folders to scan for git repositories. Supports ~ for the home directory. Symlinked subfolders are not followed."
         },
         "repodock.maxDepth": {
           "type": "number",

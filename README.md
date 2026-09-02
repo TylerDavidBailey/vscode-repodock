@@ -24,7 +24,7 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 
 ## Features
 
-- Finds every git repo in the folders you add, including repos inside other repos (submodules, vendored checkouts).
+- Finds every git repo in the folders you add, including repos inside other repos (submodules, vendored checkouts). Symlinked subfolders are not followed, so add the real folder rather than a link to it.
 - Renders a tree view in the Activity Bar, one row per repo. A repo below a folder's top level carries its path under that folder in parentheses (`ginkgo (abc)`), so same-named repos stay distinct.
 - Shows the branch and the time you last opened each repo. The tooltip adds changed and untracked counts plus ahead and behind.
 - Reloads git status and rescans the folders when the window regains focus, so a repo you cloned in a terminal appears without a manual refresh.
