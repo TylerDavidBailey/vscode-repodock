@@ -124,6 +124,39 @@ describe('scanForRepos', () => {
     expect(repos.filter((repo) => repo.relPath.startsWith('loop'))).toEqual([]);
   });
 
+  it('does not report a repository reachable only through a symlinked directory', async () => {
+    // not following symlinks is what makes the cycle above terminate, so this is the
+    // price of that: a repo behind a link is invisible. Pinned here so the skip stays
+    // deliberate rather than becoming an accident of how readdir types entries.
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-link-'));
+    try {
+      const outside = path.join(dir, 'outside');
+      await fs.mkdir(path.join(outside, 'linked-repo', '.git'), { recursive: true });
+      const scanned = path.join(dir, 'scanned');
+      await fs.mkdir(scanned);
+      await fs.symlink(outside, path.join(scanned, 'link'), 'junction');
+
+      expect(await scanForRepos(scanned, { maxDepth: 4, exclude: [] })).toEqual([]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('scans a root that is itself a symlink, because the root is read, not traversed', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-link-root-'));
+    try {
+      const outside = path.join(dir, 'outside');
+      await fs.mkdir(path.join(outside, 'linked-repo', '.git'), { recursive: true });
+      const link = path.join(dir, 'link');
+      await fs.symlink(outside, link, 'junction');
+
+      const repos = await scanForRepos(link, { maxDepth: 4, exclude: [] });
+      expect(repos.map((repo) => repo.relPath)).toEqual(['linked-repo']);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('skips an excluded directory that is itself a repository', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-excl-'));
     try {

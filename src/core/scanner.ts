@@ -32,6 +32,9 @@ function readdirWithTimeout(dir: string): Promise<Dirent[]> {
  * Recursively discovers git repositories under `root`. A directory is a repository when it
  * contains a `.git` entry (directory, or file for worktrees/submodules). Scanning continues
  * inside repositories so nested repos are found too; they carry `parentRepoPath`.
+ *
+ * Symlinked directories are not followed, so a repository reachable only through one is
+ * not reported. `root` itself may be a symlink, since it is read rather than traversed.
  */
 export async function scanForRepos(root: string, options: ScanOptions): Promise<RepoInfo[]> {
   const base = path.resolve(root);
@@ -62,12 +65,11 @@ export async function scanForRepos(root: string, options: ScanOptions): Promise<
       return;
     }
 
+    // readdir reports lstat types, so isDirectory() is already false for a symlink
+    // pointing at a directory: symlinked directories are never descended into. That is
+    // deliberate and load-bearing: it is the only thing keeping the walk free of cycles.
     const subdirs = entries.filter(
-      (entry) =>
-        entry.isDirectory() &&
-        !entry.isSymbolicLink() &&
-        entry.name !== '.git' &&
-        !excluded.has(entry.name),
+      (entry) => entry.isDirectory() && entry.name !== '.git' && !excluded.has(entry.name),
     );
     await Promise.all(
       subdirs.map((entry) => walk(path.join(dir, entry.name), depth + 1, repoHere)),
