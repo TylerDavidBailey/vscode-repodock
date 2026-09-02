@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { canonicalPathKey } from '../core/paths';
+import { filterNestedRepos } from '../core/sorting';
 import { addDirectories, getConfig, removeDirectory, tildify } from './settings';
 import type { RepoTreeProvider } from './treeProvider';
 
@@ -35,8 +36,12 @@ export function showFolderManager(provider: RepoTreeProvider): void {
   picker.placeholder = 'Folders RepoDock scans for repositories';
 
   const buildItems = (): FolderItem[] => {
-    const repos = provider.getRepos();
-    const items: FolderItem[] = getConfig().directories.map((dir) => {
+    const config = getConfig();
+    // count what the tree will actually render, so turning showNestedRepos off moves
+    // these numbers too. Overlapping roots still count a shared repo under each folder:
+    // the count answers "what is in this folder", not "which folder won the dedupe".
+    const repos = filterNestedRepos(provider.getRepos(), config.showNestedRepos);
+    const items: FolderItem[] = config.directories.map((dir) => {
       const key = canonicalPathKey(dir);
       const count = new Set(
         repos.filter((repo) => canonicalPathKey(repo.root) === key).map((repo) => repo.path),

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dedupeRepos,
   filterHiddenRepos,
+  filterNestedRepos,
   formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
@@ -64,6 +65,20 @@ describe('sameRepoList', () => {
     expect(sameRepoList(a, [makeRepo('alpha')])).toBe(false);
     expect(sameRepoList(a, [makeRepo('sub/beta'), makeRepo('alpha')])).toBe(false);
     expect(sameRepoList(a, [makeRepo('alpha'), makeRepo('sub/beta', `${ROOT}/sub`)])).toBe(false);
+  });
+});
+
+describe('filterNestedRepos', () => {
+  const outer = makeRepo('outer');
+  const inner = makeRepo('outer/inner', `${ROOT}/outer`);
+
+  it('returns the same list when nested repos are shown', () => {
+    const repos = [outer, inner];
+    expect(filterNestedRepos(repos, true)).toBe(repos);
+  });
+
+  it('drops repos carrying a parent when nested repos are hidden', () => {
+    expect(filterNestedRepos([outer, inner], false)).toEqual([outer]);
   });
 });
 

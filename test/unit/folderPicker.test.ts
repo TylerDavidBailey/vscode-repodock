@@ -120,6 +120,24 @@ describe('showFolderManager', () => {
     expect(openPicker().items[0]?.description).toBe('1 repo');
   });
 
+  it('stops counting nested repos once the view hides them', async () => {
+    // the count has to track the tree: with showNestedRepos off the tree renders one row
+    // here, so a folder claiming "2 repos" next to it reads as a bug
+    state.config.set('directories', [CODE]);
+    const mono = makeRepo({ path: '/srv/code/mono', root: '/srv/code' });
+    const repos = [
+      mono,
+      makeRepo({ path: '/srv/code/mono/pkg', root: '/srv/code', parentRepoPath: mono.path }),
+    ];
+
+    showFolderManager(await providerWith(repos));
+    expect(openPicker().items[0]?.description).toBe('2 repos');
+
+    state.config.set('showNestedRepos', false);
+    showFolderManager(await providerWith(repos));
+    expect(openPicker().items[0]?.description).toBe('1 repo');
+  });
+
   it('counts a repo under each root that found it, since each is its own row', async () => {
     // overlapping roots: /srv/code and /srv/code/inner both see the same repo. The count
     // is per configured folder, so it is right for both rows to include it.
