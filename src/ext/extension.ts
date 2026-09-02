@@ -79,13 +79,16 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (RESCAN_SETTINGS.some((key) => event.affectsConfiguration(key))) {
-        updateContexts();
-        void refreshWithProgress(provider);
-      } else if (REBUILD_SETTINGS.some((key) => event.affectsConfiguration(key))) {
-        updateContexts();
-        provider.rebuild();
-      }
+      // Both lists have to be tested, never chained with `else`: one settings save fires
+      // one event and `affectsConfiguration` answers for every key it changed. Chaining
+      // would drop the rebuild for a save touching both, because `refresh` skips
+      // rebuilding when the repo list came back unchanged.
+      const shouldRescan = RESCAN_SETTINGS.some((key) => event.affectsConfiguration(key));
+      const shouldRebuild = REBUILD_SETTINGS.some((key) => event.affectsConfiguration(key));
+      if (!shouldRescan && !shouldRebuild) return;
+      updateContexts();
+      if (shouldRebuild) provider.rebuild();
+      if (shouldRescan) void refreshWithProgress(provider);
     }),
   );
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dedupeRepos,
   filterHiddenRepos,
+  filterNestedRepos,
   formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
@@ -67,6 +68,20 @@ describe('sameRepoList', () => {
   });
 });
 
+describe('filterNestedRepos', () => {
+  const outer = makeRepo('outer');
+  const inner = makeRepo('outer/inner', `${ROOT}/outer`);
+
+  it('returns the same list when nested repos are shown', () => {
+    const repos = [outer, inner];
+    expect(filterNestedRepos(repos, true)).toBe(repos);
+  });
+
+  it('drops repos carrying a parent when nested repos are hidden', () => {
+    expect(filterNestedRepos([outer, inner], false)).toEqual([outer]);
+  });
+});
+
 describe('dedupeRepos', () => {
   it('keeps the occurrence with the shortest relative path when roots overlap', () => {
     const fromOuter = makeRepo('sub/beta');
@@ -83,6 +98,20 @@ describe('dedupeRepos', () => {
   it('leaves distinct repos alone', () => {
     const repos = [makeRepo('alpha'), makeRepo('beta')];
     expect(dedupeRepos(repos)).toEqual(repos);
+  });
+
+  it('collapses paths differing only in case on a case-insensitive filesystem', () => {
+    // two roots can reach one repo through different casing; on macOS and Windows that
+    // is a single directory, so keying on the raw path would render it twice
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try {
+      const lower: RepoInfo = { name: 'api', path: '/code/api', root: '/code', relPath: 'api' };
+      const upper: RepoInfo = { name: 'api', path: '/Code/API', root: '/Code', relPath: 'api' };
+      expect(dedupeRepos([lower, upper])).toEqual([lower]);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
   });
 });
 

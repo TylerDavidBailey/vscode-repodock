@@ -7,6 +7,12 @@ import type { SortOrder } from '../core/sorting';
 const CONFIG_SECTION = 'repodock';
 
 /**
+ * Read once: `tildify` runs for every rendered row and `homedir()` reads the password
+ * database on POSIX. The home directory cannot change while the extension host lives.
+ */
+const HOME = os.homedir();
+
+/**
  * A snapshot of the `repodock.*` settings with paths already expanded and deduplicated,
  * so callers work in absolute paths and never see a stored `~`.
  */
@@ -60,8 +66,8 @@ function dedupePaths(paths: string[]): string[] {
  * to compare two paths for equality.
  */
 export function expandPath(p: string): string {
-  if (p === '~') return os.homedir();
-  if (p.startsWith('~/') || p.startsWith('~\\')) return path.resolve(os.homedir(), p.slice(2));
+  if (p === '~') return HOME;
+  if (p.startsWith('~/') || p.startsWith('~\\')) return path.resolve(HOME, p.slice(2));
   return path.resolve(p);
 }
 
@@ -70,10 +76,9 @@ export function expandPath(p: string): string {
  * back to settings, so the stored value stays portable across machines.
  */
 export function tildify(p: string): string {
-  const home = os.homedir();
   const key = canonicalPathKey(p);
-  const homeKey = canonicalPathKey(home);
-  return key === homeKey || key.startsWith(homeKey + path.sep) ? '~' + p.slice(home.length) : p;
+  const homeKey = canonicalPathKey(HOME);
+  return key === homeKey || key.startsWith(homeKey + path.sep) ? '~' + p.slice(HOME.length) : p;
 }
 
 /**

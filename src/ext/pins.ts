@@ -3,15 +3,30 @@ import { canonicalPathKey } from '../core/paths';
 
 const KEY = 'repodock.pins';
 
+/** Stable identity for the unset store, so it caches like a populated one. Never mutated. */
+const NO_PINS: readonly string[] = [];
+
 /**
  * Repository paths pinned to the top of lists, persisted in global storage.
  * Keyed by canonical path key so Windows drive-letter casing can't lose a pin.
  */
 export class PinStore {
+  private cache?: { stored: readonly string[]; pins: ReadonlySet<string> };
+
   constructor(private readonly memento: vscode.Memento) {}
 
+  /**
+   * The set is rebuilt only when the stored array changes identity, which `update`
+   * guarantees by always writing a fresh one. Every rendered row asks for this, so
+   * rebuilding per row is most of the cost of painting a large tree. A Memento that
+   * copies on read never hits the cache, leaving the old per-call behavior.
+   */
   all(): ReadonlySet<string> {
-    return new Set(this.memento.get<string[]>(KEY, []).map(canonicalPathKey));
+    const stored = this.memento.get<readonly string[]>(KEY, NO_PINS);
+    if (this.cache?.stored !== stored) {
+      this.cache = { stored, pins: new Set(stored.map(canonicalPathKey)) };
+    }
+    return this.cache.pins;
   }
 
   isPinned(repoPath: string): boolean {

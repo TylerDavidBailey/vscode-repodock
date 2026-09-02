@@ -5,6 +5,7 @@ import { scanForRepos } from '../core/scanner';
 import {
   dedupeRepos,
   filterHiddenRepos,
+  filterNestedRepos,
   formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
@@ -216,12 +217,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   /** What the view shows: repos left after nested-repo filtering and cross-root dedupe. */
   private visibleRepos(): RepoInfo[] {
-    const config = getConfig();
-    return dedupeRepos(
-      config.showNestedRepos
-        ? this.repos
-        : this.repos.filter((repo) => repo.parentRepoPath === undefined),
-    );
+    return dedupeRepos(filterNestedRepos(this.repos, getConfig().showNestedRepos));
   }
 
   private sortedRepoElements(repos: RepoInfo[]): TreeElement[] {

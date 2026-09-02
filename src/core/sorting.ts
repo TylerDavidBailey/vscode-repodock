@@ -44,15 +44,28 @@ export function filterHiddenRepos(repos: RepoInfo[], hiddenPaths: Iterable<strin
 }
 
 /**
+ * Drops repositories sitting inside another repository (submodules, vendored checkouts)
+ * when the view is set to hide them, and returns `repos` untouched when it is not.
+ * Shared by the tree and the folder manager's repo counts, so a count can never claim
+ * repos the tree will not render.
+ */
+export function filterNestedRepos(repos: RepoInfo[], showNested: boolean): RepoInfo[] {
+  return showNested ? repos : repos.filter((repo) => repo.parentRepoPath === undefined);
+}
+
+/**
  * One entry per repo path. Overlapping scan roots find the same repo twice under
- * different relative paths; the occurrence with the shortest one wins.
+ * different relative paths; the occurrence with the shortest one wins. Keyed by
+ * canonical path key, so two roots that reach the same repo through different casing
+ * on a case-insensitive filesystem still collapse to one row.
  */
 export function dedupeRepos(repos: RepoInfo[]): RepoInfo[] {
   const byPath = new Map<string, RepoInfo>();
   for (const repo of repos) {
-    const existing = byPath.get(repo.path);
+    const key = canonicalPathKey(repo.path);
+    const existing = byPath.get(key);
     if (!existing || repo.relPath.length < existing.relPath.length) {
-      byPath.set(repo.path, repo);
+      byPath.set(key, repo);
     }
   }
   return [...byPath.values()];
