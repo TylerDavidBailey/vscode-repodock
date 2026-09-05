@@ -7,6 +7,7 @@ vi.mock('../../src/core/git', () => ({
 }));
 
 import { scanForRepos } from '../../src/core/scanner';
+import type { RepoInfo } from '../../src/core/types';
 import { activate, type RepoDockApi } from '../../src/ext/extension';
 import { CurrentRepoDecorationProvider, type RepoTreeProvider } from '../../src/ext/treeProvider';
 import { fakeExtensionContext } from './helpers/extensionContext';
@@ -14,11 +15,11 @@ import { required } from './helpers/required';
 import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state, type StubTreeView } from './helpers/vscodeStub';
 
-const alpha = makeRepo({ path: '/root/alpha' });
+const alpha = makeRepo({ path: '/srv/repos/alpha' });
 
-/** Activates with `/root` configured and the scan finding `alpha`, and waits for the first scan. */
+/** Activates with `/srv/repos` configured and the scan finding `alpha`, and waits for the first scan. */
 async function activateWithAlpha(): Promise<RepoDockApi> {
-  state.config.set('directories', [absPath('/root')]);
+  state.config.set('directories', [absPath('/srv/repos')]);
   vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
   const api = activate(fakeExtensionContext());
   await api.refresh(); // chains off the initial scan, so this settles activation too
@@ -85,13 +86,39 @@ describe('the scanning context', () => {
   });
 
   it('is cleared even when the scan fails', async () => {
-    state.config.set('directories', [absPath('/root')]);
+    state.config.set('directories', [absPath('/srv/repos')]);
     vi.mocked(scanForRepos).mockRejectedValue(new Error('disk on fire'));
 
     const api = activate(fakeExtensionContext());
     await expect(api.refresh()).rejects.toThrow('disk on fire');
 
     // the welcome view keys off !repodock.scanning; a stuck true hides it forever
+    expect(state.contextKeys.get('repodock.scanning')).toBe(false);
+  });
+
+  it('stays set while a newer refresh supersedes an older one', async () => {
+    const api = await activateWithAlpha();
+    // two scans left pending, finished by hand in the order below
+    const pending: ((repos: RepoInfo[]) => void)[] = [];
+    vi.mocked(scanForRepos).mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve)),
+    );
+
+    const refreshes = [api.refresh(), api.refresh()];
+    await vi.waitFor(() => {
+      expect(pending).toHaveLength(2);
+    });
+    expect(state.contextKeys.get('repodock.scanning')).toBe(true);
+
+    // the scan that started first belongs to the older refresh, which the provider
+    // abandons as soon as it finishes while the newer scan is still on the disk: the
+    // welcome view must not flash in between
+    required(pending[0], 'the older scan')([]);
+    await Promise.race(refreshes);
+    expect(state.contextKeys.get('repodock.scanning')).toBe(true);
+
+    required(pending[1], 'the newer scan')([]);
+    await Promise.all(refreshes);
     expect(state.contextKeys.get('repodock.scanning')).toBe(false);
   });
 });
@@ -161,7 +188,7 @@ describe('the configuration listener', () => {
     await activateWithAlpha();
     expect(state.contextKeys.get('repodock.multipleFolders')).toBe(false);
 
-    state.config.set('directories', [absPath('/root'), absPath('/other')]);
+    state.config.set('directories', [absPath('/srv/repos'), absPath('/other')]);
     await state.fireConfigChange('directories');
 
     expect(state.contextKeys.get('repodock.multipleFolders')).toBe(true);
@@ -238,7 +265,7 @@ describe('the current workspace', () => {
 
   it('defers the reveal until a hidden view opens, then stops listening', async () => {
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
-    state.config.set('directories', [absPath('/root')]);
+    state.config.set('directories', [absPath('/srv/repos')]);
     vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
 
     const api = activate(fakeExtensionContext());
@@ -260,7 +287,7 @@ describe('the current workspace', () => {
 
   it('survives a reveal the tree view rejects', async () => {
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
-    state.config.set('directories', [absPath('/root')]);
+    state.config.set('directories', [absPath('/srv/repos')]);
     vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
 
     const api = activate(fakeExtensionContext());

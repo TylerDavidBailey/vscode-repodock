@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { loadGitStates } from '../../src/core/git';
 import type { GitState } from '../../src/core/types';
@@ -33,5 +34,13 @@ describe('loadGitStates on git failures', () => {
     expect(gitMissing).toBe(false);
     expect(results.get('/slow-repo')).toEqual({ state: undefined, timedOut: true });
     expect(results.get('/broken-repo')).toEqual({ state: undefined, timedOut: false });
+  });
+
+  it('runs git without optional locks, so a background status never blocks the user', async () => {
+    await loadGitStates(['/broken-repo'], () => {});
+    const options = vi.mocked(execFile).mock.calls.at(-1)?.[2] as { env?: NodeJS.ProcessEnv };
+    expect(options.env?.GIT_OPTIONAL_LOCKS).toBe('0');
+    // the rest of the environment still reaches git, or PATH lookup of `git` itself fails
+    expect(options.env?.PATH).toBe(process.env.PATH);
   });
 });

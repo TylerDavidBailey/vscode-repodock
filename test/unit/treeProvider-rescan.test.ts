@@ -18,7 +18,7 @@ import { fakeMemento } from './helpers/memento';
 import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
-const repo = (name: string): RepoInfo => makeRepo({ path: `/root/${name}` });
+const repo = (name: string): RepoInfo => makeRepo({ path: `/srv/repos/${name}` });
 
 // what the next scan finds; copied per call so equality can't come from identity
 let scanResult: RepoInfo[] = [];
@@ -33,7 +33,7 @@ function newProvider(): RepoTreeProvider {
 describe('RepoTreeProvider background rescans', () => {
   beforeAll(() => {
     vi.useFakeTimers();
-    state.config.set('directories', [absPath('/root')]);
+    state.config.set('directories', [absPath('/srv/repos')]);
   });
 
   afterAll(() => {

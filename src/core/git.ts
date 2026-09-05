@@ -71,7 +71,16 @@ function runGitStatus(repoPath: string): Promise<GitStatusResult> {
         execFile(
           'git',
           ['-C', repoPath, 'status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
-          { timeout: GIT_STATUS_TIMEOUT_MS, maxBuffer: GIT_STATUS_MAX_BUFFER_BYTES },
+          {
+            timeout: GIT_STATUS_TIMEOUT_MS,
+            maxBuffer: GIT_STATUS_MAX_BUFFER_BYTES,
+            // `git status` refreshes the index by default, taking `.git/index.lock` while it
+            // does. This runs in the background on every window focus across every repo, so
+            // it would race the user's own git commands and fail them with "index.lock
+            // exists". Skipping the optional refresh reads the same status without the lock
+            // (the same setting VS Code's built-in git extension uses).
+            env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+          },
           (error: Error | null, stdout: string) => {
             if (error) {
               resolve({

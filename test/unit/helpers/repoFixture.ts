@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { GitState, RepoInfo } from '../../../src/core/types';
 
-const DEFAULT_ROOT = '/root';
+const DEFAULT_ROOT = '/srv/repos';
 
 /**
  * A POSIX-looking test path in the platform's own form — `/srv/code` becomes `D:\srv\code`
