@@ -7,7 +7,6 @@ vi.mock('../../src/core/git', () => ({
 }));
 
 import { scanForRepos } from '../../src/core/scanner';
-import type { RepoInfo } from '../../src/core/types';
 import { activate, type RepoDockApi } from '../../src/ext/extension';
 import { CurrentRepoDecorationProvider, type RepoTreeProvider } from '../../src/ext/treeProvider';
 import { fakeExtensionContext } from './helpers/extensionContext';
@@ -93,32 +92,6 @@ describe('the scanning context', () => {
     await expect(api.refresh()).rejects.toThrow('disk on fire');
 
     // the welcome view keys off !repodock.scanning; a stuck true hides it forever
-    expect(state.contextKeys.get('repodock.scanning')).toBe(false);
-  });
-
-  it('stays set while a newer refresh supersedes an older one', async () => {
-    const api = await activateWithAlpha();
-    // two scans left pending, finished by hand in the order below
-    const pending: ((repos: RepoInfo[]) => void)[] = [];
-    vi.mocked(scanForRepos).mockImplementation(
-      () => new Promise((resolve) => pending.push(resolve)),
-    );
-
-    const refreshes = [api.refresh(), api.refresh()];
-    await vi.waitFor(() => {
-      expect(pending).toHaveLength(2);
-    });
-    expect(state.contextKeys.get('repodock.scanning')).toBe(true);
-
-    // the scan that started first belongs to the older refresh, which the provider
-    // abandons as soon as it finishes while the newer scan is still on the disk: the
-    // welcome view must not flash in between
-    required(pending[0], 'the older scan')([]);
-    await Promise.race(refreshes);
-    expect(state.contextKeys.get('repodock.scanning')).toBe(true);
-
-    required(pending[1], 'the newer scan')([]);
-    await Promise.all(refreshes);
     expect(state.contextKeys.get('repodock.scanning')).toBe(false);
   });
 });
@@ -221,6 +194,67 @@ describe('refreshing when the user comes back', () => {
 
     await treeView().fireVisibility(true);
     expect(refreshIfStale).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('activation while the view opens', () => {
+  /**
+   * Activates with scans that stay pending until finished by hand, in the order they
+   * were started, so a test can decide which of two overlapping scans lands first.
+   */
+  function activateWithPendingScans() {
+    state.config.set('directories', [absPath('/root')]);
+    state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
+    const pending: ((repos: (typeof alpha)[]) => void)[] = [];
+    vi.mocked(scanForRepos).mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve)),
+    );
+    const api = activate(fakeExtensionContext());
+    const finishScan = (index: number) => {
+      required(pending[index], `scan ${index}`)([{ ...alpha }]);
+      // api.refresh() below chains a fresh scan off the initial one; let that one resolve
+      vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
+    };
+    return { api, finishScan };
+  }
+
+  it('does not restart the initial scan when the view becomes visible during it', async () => {
+    const { api, finishScan } = activateWithPendingScans();
+    await treeView().fireVisibility(true);
+    expect(scanForRepos).toHaveBeenCalledTimes(1);
+
+    finishScan(0);
+    await api.refresh();
+    expect(api.getRepos().map((repo) => repo.path)).toEqual([alpha.path]);
+  });
+
+  it('still reveals and records the current repo after a focus event mid-scan', async () => {
+    const { api, finishScan } = activateWithPendingScans();
+    await state.fireWindowState(true);
+
+    finishScan(0);
+    await api.refresh();
+
+    expect(treeView().reveal).toHaveBeenCalledTimes(1);
+    const item = api.provider.getTreeItem(
+      required(api.provider.findRepoElement(alpha.path), 'an element for alpha'),
+    );
+    expect(item.description).toBe('now');
+  });
+
+  it('keeps the scanning context set until every overlapping refresh has finished', async () => {
+    const { api, finishScan } = activateWithPendingScans();
+    // a settings change while the initial scan runs starts a second one that supersedes it
+    await state.fireConfigChange('directories');
+    expect(scanForRepos).toHaveBeenCalledTimes(2);
+    finishScan(0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // the first scan has come back, but the second is still running
+    expect(state.contextKeys.get('repodock.scanning')).toBe(true);
+
+    finishScan(1);
+    await api.refresh();
+    expect(state.contextKeys.get('repodock.scanning')).toBe(false);
   });
 });
 

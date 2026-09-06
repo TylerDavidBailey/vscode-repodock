@@ -10,6 +10,7 @@ vi.mock('../../src/core/git', () => ({
 
 import { canonicalPathKey } from '../../src/core/paths';
 import { registerCommands } from '../../src/ext/commands';
+import { getConfig } from '../../src/ext/settings';
 import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider, type TreeElement } from '../../src/ext/treeProvider';
@@ -86,20 +87,23 @@ describe('opening a repository', () => {
 });
 
 describe('pinning', () => {
-  it('toggles a pin on and off again', async () => {
+  it('pins without ever unpinning', async () => {
+    // the menu only offers Pin on an unpinned row, but the contextValue it keys off can
+    // be stale (another window pinned it, or the row has not re-rendered yet), so a second
+    // Pin must be a no-op rather than silently undoing the first
     await run('repodock.pinRepo', element);
     expect(pins.isPinned(repo.path)).toBe(true);
     await run('repodock.pinRepo', element);
-    expect(pins.isPinned(repo.path)).toBe(false);
+    expect(pins.isPinned(repo.path)).toBe(true);
   });
 
   it('unpins without ever pinning', async () => {
-    // the menu only offers Unpin on a -pinned row, but a stale contextValue or a
-    // programmatic executeCommand must not turn the command into a pin
+    // the mirror image: a stale -pinned contextValue or a programmatic executeCommand
+    // must not turn Unpin into a pin
     await run('repodock.unpinRepo', element);
     expect(pins.isPinned(repo.path)).toBe(false);
 
-    await pins.toggle(repo.path);
+    await pins.pin(repo.path);
     await run('repodock.unpinRepo', element);
     expect(pins.isPinned(repo.path)).toBe(false);
   });
@@ -175,6 +179,20 @@ describe('settings-writing commands', () => {
     await run('repodock.unhideAll');
     expect(state.config.has('hiddenRepos')).toBe(false);
   });
+
+  it('unhides repos hidden by a workspace-level setting too', async () => {
+    // a workspace value shadows the global one, so clearing global alone would leave
+    // every repo hidden and the command looking like it did nothing
+    state.workspaceConfig.set('hiddenRepos', [repo.path]);
+    await run('repodock.unhideAll');
+    expect(getConfig().hiddenRepos).toEqual([]);
+  });
+
+  it('records a hidden repo in the workspace list when that list is in effect', async () => {
+    state.workspaceConfig.set('hiddenRepos', []);
+    await run('repodock.hideRepo', element);
+    expect(getConfig().hiddenRepos).toEqual([repo.path]);
+  });
 });
 
 describe('operating-system commands', () => {
@@ -200,16 +218,45 @@ describe('operating-system commands', () => {
 
   it('appends the repository to the workspace after the existing folders', async () => {
     state.workspaceFolders = [{ uri: { fsPath: '/other' } }, { uri: { fsPath: '/another' } }];
+    state.updateWorkspaceFolders.mockReturnValue(true);
     await run('repodock.addToWorkspace', element);
 
     const [start, deleteCount, added] = state.updateWorkspaceFolders.mock.calls[0] ?? [];
     expect([start, deleteCount]).toEqual([2, 0]);
     expect((added as { uri: { fsPath: string } }).uri.fsPath).toBe(repo.path);
+    expect(state.showInformationMessage).not.toHaveBeenCalled();
+    expect(state.showWarningMessage).not.toHaveBeenCalled();
   });
 
   it('appends at index 0 when no workspace is open', async () => {
+    state.updateWorkspaceFolders.mockReturnValue(true);
     await run('repodock.addToWorkspace', element);
     expect(state.updateWorkspaceFolders).toHaveBeenCalledWith(0, 0, expect.anything());
+  });
+
+  it('says so instead of asking VS Code when the repo is already a workspace folder', async () => {
+    // updateWorkspaceFolders rejects a duplicate folder by returning false, and the
+    // explorer does not change, so without a message the command looks broken
+    state.workspaceFolders = [{ uri: { fsPath: repo.path.toUpperCase() } }];
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'darwin' }); // case-insensitive match
+    try {
+      await run('repodock.addToWorkspace', element);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+    expect(state.updateWorkspaceFolders).not.toHaveBeenCalled();
+    expect(state.showInformationMessage).toHaveBeenCalledWith(
+      `${repo.name} is already a folder in this workspace.`,
+    );
+  });
+
+  it('warns when VS Code refuses the change', async () => {
+    state.updateWorkspaceFolders.mockReturnValue(false);
+    await run('repodock.addToWorkspace', element);
+    expect(state.showWarningMessage).toHaveBeenCalledWith(
+      `RepoDock could not add ${repo.name} to the workspace.`,
+    );
   });
 });
 

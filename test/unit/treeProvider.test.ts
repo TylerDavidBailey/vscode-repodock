@@ -94,7 +94,7 @@ describe('RepoTreeProvider', () => {
     const { provider, recency, pins } = newProvider();
     await provider.refresh();
     await recency.touch(alpha.path); // alpha is most recent, so the pin has to outrank it
-    await pins.toggle(beta.path);
+    await pins.pin(beta.path);
 
     const rows = provider.getChildren();
     expect(labels(rows)).toEqual(['beta (sub)', 'alpha']);

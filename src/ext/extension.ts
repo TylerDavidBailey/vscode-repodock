@@ -48,13 +48,11 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     vscode.window.registerFileDecorationProvider(new CurrentRepoDecorationProvider()),
   );
 
-  const refreshWithProgress = createProgressRefresh(provider);
-
   registerCommands(context, {
     provider,
     recency,
     pins,
-    refresh: () => refreshWithProgress(),
+    refresh: () => refreshWithProgress(provider),
   });
 
   const updateContexts = () => {
@@ -90,7 +88,7 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
       if (!shouldRescan && !shouldRebuild) return;
       updateContexts();
       if (shouldRebuild) provider.rebuild();
-      if (shouldRescan) void refreshWithProgress();
+      if (shouldRescan) void refreshWithProgress(provider);
     }),
   );
 
@@ -135,7 +133,7 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     }
   };
 
-  const initialScan = refreshWithProgress().then(async () => {
+  const initialScan = refreshWithProgress(provider).then(async () => {
     // record the workspace we're sitting in so "recent" ordering knows about it
     const currentPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const currentRepo = currentPath === undefined ? undefined : findRepoForPath(currentPath);
@@ -157,32 +155,25 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   });
 
   return {
-    refresh: () => initialScan.then(() => refreshWithProgress()),
+    refresh: () => initialScan.then(() => refreshWithProgress(provider)),
     getRepos: () => provider.getRepos(),
     provider,
   };
 }
 
 /**
- * Builds a refresh that runs with the `repodock.scanning` context set, which swaps the
- * welcome view for a progress message. Only for refreshes the user asked for: on an
- * automatic one the toggle would flicker the welcome view for users with no repos.
- *
- * Refreshes can overlap (a Refresh click followed by an Add Folder), and the provider
- * abandons the superseded one as soon as its scan finishes. The context is therefore
- * counted rather than toggled, so the abandoned refresh cannot clear it while the newer
- * one is still scanning.
+ * Refreshes with the `repodock.scanning` context set, which swaps the welcome view for a
+ * progress message. Only for refreshes the user asked for: on an automatic one the toggle
+ * would flicker the welcome view for users with no repos.
  */
-function createProgressRefresh(provider: RepoTreeProvider): () => Promise<void> {
-  let inFlight = 0;
-  const setScanning = (scanning: boolean) =>
-    vscode.commands.executeCommand('setContext', 'repodock.scanning', scanning);
-  return async () => {
-    if (inFlight++ === 0) await setScanning(true);
-    try {
-      await provider.refresh();
-    } finally {
-      if (--inFlight === 0) await setScanning(false);
-    }
-  };
+async function refreshWithProgress(provider: RepoTreeProvider): Promise<void> {
+  // not awaited: the scan has to start before this function yields, so a focus or
+  // visibility event arriving meanwhile joins it instead of starting a second one.
+  // VS Code runs commands in call order, so the clear below still lands after this.
+  void vscode.commands.executeCommand('setContext', 'repodock.scanning', true);
+  try {
+    await provider.refresh();
+  } finally {
+    await vscode.commands.executeCommand('setContext', 'repodock.scanning', false);
+  }
 }

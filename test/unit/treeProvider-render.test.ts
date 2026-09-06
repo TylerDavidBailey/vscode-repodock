@@ -77,13 +77,13 @@ describe('contextValue', () => {
 
   it('suffixes a pinned repo', async () => {
     const { provider, pins } = await render([alpha]);
-    await pins.toggle(alpha.path);
+    await pins.pin(alpha.path);
     expect(itemFor(provider, alpha.path).contextValue).toBe('repo-pinned');
   });
 
   it('suffixes a pinned nested repo', async () => {
     const { provider, pins } = await render([alpha, nested]);
-    await pins.toggle(nested.path);
+    await pins.pin(nested.path);
     expect(itemFor(provider, nested.path).contextValue).toBe('repoNested-pinned');
   });
 });
@@ -234,7 +234,7 @@ describe('the tooltip', () => {
 
   it('flags the pinned and current-window states', async () => {
     const { provider, pins } = await render([alpha]);
-    await pins.toggle(alpha.path);
+    await pins.pin(alpha.path);
     provider.setCurrentRepos([alpha.path]);
     expect(tooltipOf(itemFor(provider, alpha.path))).toContain('open in this window, pinned');
   });

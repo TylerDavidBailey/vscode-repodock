@@ -150,6 +150,76 @@ describe('hideRepo', () => {
   });
 });
 
+describe('writing where the workspace supplies the value', () => {
+  // VS Code resolves a setting workspace-first, so a write to the global scope while the
+  // workspace scope holds a value changes nothing the user can see: the tree keeps
+  // rendering the workspace value and the command looks broken
+  const workspaceStore = state.workspaceConfig;
+
+  it('adds a directory to the workspace list that is in effect', async () => {
+    configStore.set('directories', ['~/global']);
+    workspaceStore.set('directories', ['~/work']);
+    await addDirectories([path.join(home, 'projects')]);
+    expect(workspaceStore.get('directories')).toEqual(['~/work', '~' + path.sep + 'projects']);
+    expect(configStore.get('directories')).toEqual(['~/global']);
+    expect(getConfig().directories).toContain(path.join(home, 'projects'));
+  });
+
+  it('removes a directory from every scope that lists it', async () => {
+    configStore.set('directories', ['~/code', '~/global']);
+    workspaceStore.set('directories', ['~/code', '~/work']);
+    await removeDirectory(path.join(home, 'code'));
+    expect(workspaceStore.get('directories')).toEqual(['~/work']);
+    expect(configStore.get('directories')).toEqual(['~/global']);
+  });
+
+  it('hides a repo in the workspace list that is in effect', async () => {
+    workspaceStore.set('hiddenRepos', []);
+    await hideRepo(path.join(home, 'code', 'alpha'));
+    expect(workspaceStore.get('hiddenRepos')).toEqual([
+      '~' + path.sep + path.join('code', 'alpha'),
+    ]);
+    expect(configStore.has('hiddenRepos')).toBe(false);
+    expect(getConfig().hiddenRepos).toEqual([path.join(home, 'code', 'alpha')]);
+  });
+
+  it('unhides everything by clearing both scopes', async () => {
+    configStore.set('hiddenRepos', ['~/code/alpha']);
+    workspaceStore.set('hiddenRepos', ['~/code/beta']);
+    await unhideAllRepos();
+    expect(workspaceStore.has('hiddenRepos')).toBe(false);
+    expect(configStore.has('hiddenRepos')).toBe(false);
+    expect(getConfig().hiddenRepos).toEqual([]);
+  });
+
+  it('sets the sort order and grouping in the scope that is in effect', async () => {
+    workspaceStore.set('sortOrder', 'alphabetical');
+    workspaceStore.set('groupByFolder', true);
+    await setSortOrder('recent');
+    await setGroupByFolder(false);
+    expect(workspaceStore.get('sortOrder')).toBe('recent');
+    expect(workspaceStore.get('groupByFolder')).toBe(false);
+    expect(configStore.has('sortOrder')).toBe(false);
+    expect(getConfig().sortOrder).toBe('recent');
+    expect(getConfig().groupByFolder).toBe(false);
+  });
+
+  it('falls back to the global scope when only it holds a value', async () => {
+    configStore.set('sortOrder', 'alphabetical');
+    await setSortOrder('recent');
+    expect(configStore.get('sortOrder')).toBe('recent');
+    expect(workspaceStore.has('sortOrder')).toBe(false);
+  });
+
+  it('writes globally in an untrusted workspace, whose workspace values VS Code ignores', async () => {
+    state.workspaceTrusted = false;
+    workspaceStore.set('sortOrder', 'alphabetical');
+    await setSortOrder('recent');
+    expect(configStore.get('sortOrder')).toBe('recent');
+    expect(workspaceStore.get('sortOrder')).toBe('alphabetical');
+  });
+});
+
 describe('unhideAllRepos', () => {
   it('clears the setting rather than writing an empty list', async () => {
     configStore.set('hiddenRepos', ['~/code/alpha']);
