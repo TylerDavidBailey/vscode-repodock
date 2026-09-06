@@ -200,16 +200,45 @@ describe('operating-system commands', () => {
 
   it('appends the repository to the workspace after the existing folders', async () => {
     state.workspaceFolders = [{ uri: { fsPath: '/other' } }, { uri: { fsPath: '/another' } }];
+    state.updateWorkspaceFolders.mockReturnValue(true);
     await run('repodock.addToWorkspace', element);
 
     const [start, deleteCount, added] = state.updateWorkspaceFolders.mock.calls[0] ?? [];
     expect([start, deleteCount]).toEqual([2, 0]);
     expect((added as { uri: { fsPath: string } }).uri.fsPath).toBe(repo.path);
+    expect(state.showInformationMessage).not.toHaveBeenCalled();
+    expect(state.showWarningMessage).not.toHaveBeenCalled();
   });
 
   it('appends at index 0 when no workspace is open', async () => {
+    state.updateWorkspaceFolders.mockReturnValue(true);
     await run('repodock.addToWorkspace', element);
     expect(state.updateWorkspaceFolders).toHaveBeenCalledWith(0, 0, expect.anything());
+  });
+
+  it('says so instead of asking VS Code when the repo is already a workspace folder', async () => {
+    // updateWorkspaceFolders rejects a duplicate folder by returning false, and the
+    // explorer does not change, so without a message the command looks broken
+    state.workspaceFolders = [{ uri: { fsPath: repo.path.toUpperCase() } }];
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'darwin' }); // case-insensitive match
+    try {
+      await run('repodock.addToWorkspace', element);
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+    expect(state.updateWorkspaceFolders).not.toHaveBeenCalled();
+    expect(state.showInformationMessage).toHaveBeenCalledWith(
+      `${repo.name} is already a folder in this workspace.`,
+    );
+  });
+
+  it('warns when VS Code refuses the change', async () => {
+    state.updateWorkspaceFolders.mockReturnValue(false);
+    await run('repodock.addToWorkspace', element);
+    expect(state.showWarningMessage).toHaveBeenCalledWith(
+      `RepoDock could not add ${repo.name} to the workspace.`,
+    );
   });
 });
 
