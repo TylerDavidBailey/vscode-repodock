@@ -53,8 +53,8 @@ async function renderedContextValues(): Promise<RowContextValues> {
   state.config.set('directories', [absPath('/root')]);
 
   const pins = new PinStore(fakeMemento());
-  await pins.toggle(pinned.path);
-  await pins.toggle(nestedPinned.path);
+  await pins.pin(pinned.path);
+  await pins.pin(nestedPinned.path);
   const provider = new RepoTreeProvider(new RecencyStore(fakeMemento()), pins);
   await provider.refresh();
 

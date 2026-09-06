@@ -65,7 +65,7 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
     vscode.commands.registerCommand(
       'repodock.pinRepo',
       withRepo(async (repo) => {
-        await pins.toggle(repo.path);
+        await pins.pin(repo.path);
         provider.rebuild();
       }),
     ),

@@ -9,19 +9,30 @@ describe('PinStore', () => {
     expect(pins.isPinned('/repo/a')).toBe(false);
   });
 
-  it('pins a path and unpins it again on a second toggle', async () => {
+  it('pins a path and unpins it again', async () => {
     const pins = new PinStore(fakeMemento());
-    await pins.toggle('/repo/a');
+    await pins.pin('/repo/a');
     expect(pins.isPinned('/repo/a')).toBe(true);
-    await pins.toggle('/repo/a');
+    await pins.unpin('/repo/a');
     expect(pins.isPinned('/repo/a')).toBe(false);
   });
 
-  it('keeps other pins intact when toggling one', async () => {
+  it('leaves a pinned path pinned when pinned again', async () => {
+    const memento = fakeMemento();
+    const pins = new PinStore(memento);
+    await pins.pin('/repo/a');
+    const stored = memento.get('repodock.pins');
+    await pins.pin('/repo/a');
+    expect(pins.isPinned('/repo/a')).toBe(true);
+    // a no-op must not rewrite the store either, or every row would rebuild its cache
+    expect(memento.get('repodock.pins')).toBe(stored);
+  });
+
+  it('keeps other pins intact when unpinning one', async () => {
     const pins = new PinStore(fakeMemento());
-    await pins.toggle('/repo/a');
-    await pins.toggle('/repo/b');
-    await pins.toggle('/repo/a');
+    await pins.pin('/repo/a');
+    await pins.pin('/repo/b');
+    await pins.unpin('/repo/a');
     expect([...pins.all()]).toEqual(['/repo/b']);
   });
 
@@ -30,9 +41,9 @@ describe('PinStore', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
       const pins = new PinStore(fakeMemento());
-      await pins.toggle('C:\\Repos\\API');
+      await pins.pin('C:\\Repos\\API');
       expect(pins.isPinned('c:\\repos\\api')).toBe(true);
-      await pins.toggle('c:\\repos\\api');
+      await pins.unpin('c:\\repos\\api');
       expect(pins.isPinned('C:\\Repos\\API')).toBe(false);
     } finally {
       if (platform) Object.defineProperty(process, 'platform', platform);
