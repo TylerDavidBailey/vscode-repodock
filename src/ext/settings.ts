@@ -36,15 +36,31 @@ export interface RepoDockConfig {
 export function getConfig(): RepoDockConfig {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   return {
-    directories: dedupePaths(config.get<string[]>('directories', []).map(expandPath)),
+    directories: dedupePaths(
+      config.get<unknown[]>('directories', []).filter(isUsablePath).map(expandPath),
+    ),
     maxDepth: config.get<number>('maxDepth', 4),
     exclude: config.get<string[]>('exclude', ['node_modules', 'bower_components', '.Trash']),
-    hiddenRepos: config.get<string[]>('hiddenRepos', []).map(expandPath),
+    hiddenRepos: config.get<unknown[]>('hiddenRepos', []).filter(isUsablePath).map(expandPath),
     showNestedRepos: config.get<boolean>('showNestedRepos', true),
     sortOrder: config.get<SortOrder>('sortOrder', 'recent'),
     groupByFolder: config.get<boolean>('groupByFolder', false),
     openInNewWindow: config.get<boolean>('openInNewWindow', false),
   };
+}
+
+/**
+ * Whether a stored entry names a directory on its own. Settings JSON is edited by hand, and
+ * an empty string or a relative path would resolve against the extension host's working
+ * directory, which is wherever VS Code was launched from (`/` on macOS): scanning that walks
+ * the whole disk. Such entries are dropped rather than resolved, as is anything that is not
+ * a string, which `expandPath` would throw on.
+ */
+function isUsablePath(entry: unknown): entry is string {
+  if (typeof entry !== 'string' || entry.trim() === '') return false;
+  return (
+    entry === '~' || entry.startsWith('~/') || entry.startsWith('~\\') || path.isAbsolute(entry)
+  );
 }
 
 function dedupePaths(paths: string[]): string[] {
