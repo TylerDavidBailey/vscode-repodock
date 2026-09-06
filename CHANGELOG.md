@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.3](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.2...v1.1.3) (2026-09-06)
+
+
+### Bug Fixes
+
+* ignore blank and relative entries in directories and hiddenRepos ([#34](https://github.com/TylerDavidBailey/vscode-repodock/issues/34)) ([f29d9bd](https://github.com/TylerDavidBailey/vscode-repodock/commit/f29d9bdda5a5bf3511c3eb08129b042c8a2b3d95))
+* keep a superseded refresh waiting for the scan that replaced it ([#33](https://github.com/TylerDavidBailey/vscode-repodock/issues/33)) ([7429cd3](https://github.com/TylerDavidBailey/vscode-repodock/commit/7429cd32b172cf6e870427c4e5e95bc31b3b29cb))
+* make Pin Repository a no-op on a repo that is already pinned ([#37](https://github.com/TylerDavidBailey/vscode-repodock/issues/37)) ([32b0be8](https://github.com/TylerDavidBailey/vscode-repodock/commit/32b0be8c692f8b5aa0a65b156a7a5727ac0f6023))
+* run git status without optional locks and pin ovsx ([#32](https://github.com/TylerDavidBailey/vscode-repodock/issues/32)) ([f08c47b](https://github.com/TylerDavidBailey/vscode-repodock/commit/f08c47b110c9e1476c6b02410a3290b9c5c97597))
+* tell the user when Add to Workspace changes nothing ([#38](https://github.com/TylerDavidBailey/vscode-repodock/issues/38)) ([a1759a3](https://github.com/TylerDavidBailey/vscode-repodock/commit/a1759a3a64debb5ee5842c17afb3c090021dc554))
+* write settings to the scope whose value is in effect ([#36](https://github.com/TylerDavidBailey/vscode-repodock/issues/36)) ([34ead6e](https://github.com/TylerDavidBailey/vscode-repodock/commit/34ead6e4063ea3c841d9e324fac6eb8f088c4b25))
+
 ## [1.1.2](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.1...v1.1.2) (2026-09-02)
 
 
