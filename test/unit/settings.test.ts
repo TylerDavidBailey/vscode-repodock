@@ -12,6 +12,7 @@ import {
   tildify,
   unhideAllRepos,
 } from '../../src/ext/settings';
+import { absPath } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
@@ -115,7 +116,9 @@ describe('getConfig', () => {
   });
 
   it('keeps ~ and absolute entries in every accepted form', () => {
-    const abs = path.join(path.sep, 'srv', 'repos');
+    // absPath gives a drive-letter path on Windows; a bare `\srv\repos` passes isAbsolute
+    // there but path.resolve still prefixes the current drive, so the two would not match
+    const abs = absPath('/srv/repos');
     configStore.set('directories', ['~', '~/code', '~\\other', abs]);
     expect(getConfig().directories).toEqual([
       home,
