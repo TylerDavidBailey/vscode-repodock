@@ -10,6 +10,7 @@ vi.mock('../../src/core/git', () => ({
 
 import { canonicalPathKey } from '../../src/core/paths';
 import { registerCommands } from '../../src/ext/commands';
+import { getConfig } from '../../src/ext/settings';
 import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
 import { RepoTreeProvider, type TreeElement } from '../../src/ext/treeProvider';
@@ -177,6 +178,20 @@ describe('settings-writing commands', () => {
     state.config.set('hiddenRepos', [repo.path]);
     await run('repodock.unhideAll');
     expect(state.config.has('hiddenRepos')).toBe(false);
+  });
+
+  it('unhides repos hidden by a workspace-level setting too', async () => {
+    // a workspace value shadows the global one, so clearing global alone would leave
+    // every repo hidden and the command looking like it did nothing
+    state.workspaceConfig.set('hiddenRepos', [repo.path]);
+    await run('repodock.unhideAll');
+    expect(getConfig().hiddenRepos).toEqual([]);
+  });
+
+  it('records a hidden repo in the workspace list when that list is in effect', async () => {
+    state.workspaceConfig.set('hiddenRepos', []);
+    await run('repodock.hideRepo', element);
+    expect(getConfig().hiddenRepos).toEqual([repo.path]);
   });
 });
 
