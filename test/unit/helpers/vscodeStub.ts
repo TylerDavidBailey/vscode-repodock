@@ -40,8 +40,12 @@ export interface StubTreeView {
 
 /** Everything the stub records or lets a test steer; read back in assertions. */
 export interface StubState {
-  /** Settings, keyed WITHOUT the `repodock.` prefix — see `createVscodeStub`. */
+  /** User (global) settings, keyed WITHOUT the `repodock.` prefix — see `createVscodeStub`. */
   config: Map<string, unknown>;
+  /** Workspace settings, same keys; a value here shadows `config` in `get`, as in VS Code. */
+  workspaceConfig: Map<string, unknown>;
+  /** `workspace.isTrusted`; a Restricted Mode workspace ignores its workspace-scoped values. */
+  workspaceTrusted: boolean;
   /** Command id to handler, populated by `commands.registerCommand`. */
   commands: Map<string, (...args: never[]) => unknown>;
   /** Context keys set through `executeCommand('setContext', key, value)`. */
@@ -97,6 +101,8 @@ export function createStubState(): StubState {
 
   const state: StubState = {
     config: new Map(),
+    workspaceConfig: new Map(),
+    workspaceTrusted: true,
     commands: new Map(),
     contextKeys: new Map(),
     executeCommand: vi.fn(),
@@ -119,6 +125,8 @@ export function createStubState(): StubState {
     fireWorkspaceFoldersChange: () => fire(listeners.workspaceFolders, undefined),
     reset: () => {
       state.config.clear();
+      state.workspaceConfig.clear();
+      state.workspaceTrusted = true;
       state.commands.clear();
       state.contextKeys.clear();
       terminals.length = 0;
@@ -159,11 +167,15 @@ export const stubState = createStubState();
  * import { stubState as state } from './helpers/vscodeStub';
  * ```
  *
- * Two deliberate simplifications: `getConfiguration` ignores its section argument and stores
- * keys unprefixed (`'directories'`, not `'repodock.directories'`), and `update` ignores its
- * `ConfigurationTarget`. Only one section exists, so the prefix would be noise in every
- * assertion — but it means `state.fireConfigChange` has to accept both forms, since
- * `extension.ts` calls `affectsConfiguration('repodock.directories')`.
+ * One deliberate simplification: `getConfiguration` ignores its section argument and stores
+ * keys unprefixed (`'directories'`, not `'repodock.directories'`). Only one section exists,
+ * so the prefix would be noise in every assertion — but it means `state.fireConfigChange`
+ * has to accept both forms, since `extension.ts` calls `affectsConfiguration('repodock.directories')`.
+ *
+ * Scopes are modelled: `update` honors its `ConfigurationTarget` (`Workspace` writes to
+ * `state.workspaceConfig`, anything else to `state.config`), `get` lets a workspace value
+ * shadow a global one, and `inspect` reports both — the pieces a writer needs to avoid
+ * updating a scope the workspace is shadowing.
  */
 export function createVscodeStub(state: StubState = stubState) {
   const { listeners } = state;
@@ -343,14 +355,28 @@ export function createVscodeStub(state: StubState = stubState) {
       get workspaceFolders() {
         return state.workspaceFolders;
       },
+      get isTrusted() {
+        return state.workspaceTrusted;
+      },
       getConfiguration: () => ({
-        get: <T>(key: string, defaultValue: T) =>
-          state.config.has(key) ? (state.config.get(key) as T) : defaultValue,
-        update: (key: string, value: unknown) => {
+        get: <T>(key: string, defaultValue: T) => {
+          // a workspace value shadows the global one only while the workspace is trusted
+          if (state.workspaceTrusted && state.workspaceConfig.has(key)) {
+            return state.workspaceConfig.get(key) as T;
+          }
+          return state.config.has(key) ? (state.config.get(key) as T) : defaultValue;
+        },
+        inspect: (key: string) => ({
+          key,
+          globalValue: state.config.get(key),
+          workspaceValue: state.workspaceConfig.get(key),
+        }),
+        update: (key: string, value: unknown, target?: number) => {
+          const store = target === 2 ? state.workspaceConfig : state.config;
           if (value === undefined) {
-            state.config.delete(key);
+            store.delete(key);
           } else {
-            state.config.set(key, value);
+            store.set(key, value);
           }
           return Promise.resolve();
         },

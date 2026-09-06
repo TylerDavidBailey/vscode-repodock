@@ -82,9 +82,39 @@ export function tildify(p: string): string {
 }
 
 /**
- * Adds scan roots, skipping any already configured. Stores them tildified, and — like
- * every writer here — updates global settings, which fires the configuration listener
- * in `extension.ts` and rescans; callers need not refresh the tree themselves.
+ * The scope whose value `get` currently returns for `key`, so that a write lands where the
+ * user will see it. VS Code resolves settings workspace-first, so writing to the global
+ * scope while the workspace holds a value changes nothing visible. A Restricted Mode
+ * workspace is the exception: its workspace values are ignored, so its global scope is the
+ * one in effect. Every setting here is window-scoped, so folder values never apply.
+ */
+function effectiveTarget(
+  config: vscode.WorkspaceConfiguration,
+  key: string,
+): vscode.ConfigurationTarget {
+  const hasWorkspaceValue = config.inspect(key)?.workspaceValue !== undefined;
+  return hasWorkspaceValue && vscode.workspace.isTrusted
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+}
+
+/** The scopes that hold a value for `key`, so a removal can reach each one. */
+function scopesHolding(
+  config: vscode.WorkspaceConfiguration,
+  key: string,
+): vscode.ConfigurationTarget[] {
+  const info = config.inspect(key);
+  const scopes: vscode.ConfigurationTarget[] = [];
+  if (info?.workspaceValue !== undefined) scopes.push(vscode.ConfigurationTarget.Workspace);
+  if (info?.globalValue !== undefined) scopes.push(vscode.ConfigurationTarget.Global);
+  return scopes;
+}
+
+/**
+ * Adds scan roots, skipping any already configured. Stores them tildified, in the scope
+ * whose list is in effect (see `effectiveTarget`). Like every writer here, the update fires
+ * the configuration listener in `extension.ts`, which rescans; callers need not refresh
+ * the tree themselves.
  */
 export async function addDirectories(paths: string[]): Promise<void> {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
@@ -94,20 +124,30 @@ export async function addDirectories(paths: string[]): Promise<void> {
     const key = canonicalPathKey(expandPath(dir));
     if (!merged.some((entry) => canonicalPathKey(expandPath(entry)) === key)) merged.push(dir);
   }
-  await config.update('directories', merged, vscode.ConfigurationTarget.Global);
+  await config.update('directories', merged, effectiveTarget(config, 'directories'));
 }
 
-/** Removes a scan root. Matches by canonical key, so stored `~` entries are found too. */
+/**
+ * Removes a scan root from every scope that lists it, so no lower-priority scope can bring
+ * it back. Matches by canonical key, so stored `~` entries are found too.
+ */
 export async function removeDirectory(absolutePath: string): Promise<void> {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   const key = canonicalPathKey(absolutePath);
-  const remaining = config
-    .get<string[]>('directories', [])
-    .filter((entry) => canonicalPathKey(expandPath(entry)) !== key);
-  await config.update('directories', remaining, vscode.ConfigurationTarget.Global);
+  const info = config.inspect<string[]>('directories');
+  for (const scope of scopesHolding(config, 'directories')) {
+    const stored =
+      (scope === vscode.ConfigurationTarget.Workspace ? info?.workspaceValue : info?.globalValue) ??
+      [];
+    const remaining = stored.filter((entry) => canonicalPathKey(expandPath(entry)) !== key);
+    if (remaining.length !== stored.length) await config.update('directories', remaining, scope);
+  }
 }
 
-/** Hides one repository from the tree, which also hides any repos nested inside it. */
+/**
+ * Hides one repository from the tree, which also hides any repos nested inside it. Written
+ * to the scope whose list is in effect (see `effectiveTarget`).
+ */
 export async function hideRepo(absolutePath: string): Promise<void> {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   const existing = config.get<string[]>('hiddenRepos', []);
@@ -116,24 +156,24 @@ export async function hideRepo(absolutePath: string): Promise<void> {
   await config.update(
     'hiddenRepos',
     [...existing, tildify(absolutePath)],
-    vscode.ConfigurationTarget.Global,
+    effectiveTarget(config, 'hiddenRepos'),
   );
 }
 
+/** Clears the hidden list in every scope that has one, so nothing stays hidden. */
 export async function unhideAllRepos(): Promise<void> {
-  await vscode.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .update('hiddenRepos', undefined, vscode.ConfigurationTarget.Global);
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  for (const scope of scopesHolding(config, 'hiddenRepos')) {
+    await config.update('hiddenRepos', undefined, scope);
+  }
 }
 
 export async function setSortOrder(order: SortOrder): Promise<void> {
-  await vscode.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .update('sortOrder', order, vscode.ConfigurationTarget.Global);
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  await config.update('sortOrder', order, effectiveTarget(config, 'sortOrder'));
 }
 
 export async function setGroupByFolder(enabled: boolean): Promise<void> {
-  await vscode.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .update('groupByFolder', enabled, vscode.ConfigurationTarget.Global);
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  await config.update('groupByFolder', enabled, effectiveTarget(config, 'groupByFolder'));
 }
