@@ -12,6 +12,7 @@ import {
   tildify,
   unhideAllRepos,
 } from '../../src/ext/settings';
+import { absPath } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
@@ -100,6 +101,36 @@ describe('getConfig', () => {
   it('expands and dedupes directories that differ only in form', () => {
     configStore.set('directories', ['~/code', path.join(home, 'code'), '~/code/']);
     expect(getConfig().directories).toEqual([path.join(home, 'code')]);
+  });
+
+  it('ignores blank and relative directory entries instead of resolving them against cwd', () => {
+    // an empty string is what a hand-edited settings.json most often ends up with; resolving
+    // it would scan the extension host's working directory, which is '/' on macOS
+    configStore.set('directories', ['', '   ', 'code', './code', '../code', '~/code']);
+    expect(getConfig().directories).toEqual([path.join(home, 'code')]);
+  });
+
+  it('ignores entries that are not strings', () => {
+    configStore.set('directories', [42, null, { path: '~/code' }, '~/code']);
+    expect(getConfig().directories).toEqual([path.join(home, 'code')]);
+  });
+
+  it('keeps ~ and absolute entries in every accepted form', () => {
+    // absPath gives a drive-letter path on Windows; a bare `\srv\repos` passes isAbsolute
+    // there but path.resolve still prefixes the current drive, so the two would not match
+    const abs = absPath('/srv/repos');
+    configStore.set('directories', ['~', '~/code', '~\\other', abs]);
+    expect(getConfig().directories).toEqual([
+      home,
+      path.join(home, 'code'),
+      path.resolve(home, 'other'),
+      abs,
+    ]);
+  });
+
+  it('applies the same filtering to hiddenRepos', () => {
+    configStore.set('hiddenRepos', ['', 'alpha', 7, '~/code/alpha']);
+    expect(getConfig().hiddenRepos).toEqual([path.join(home, 'code', 'alpha')]);
   });
 });
 

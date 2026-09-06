@@ -57,6 +57,14 @@ describe('RepoTreeProvider', () => {
     scanReturns([alpha, beta]);
   });
 
+  it('never scans the working directory for a blank directories entry', async () => {
+    state.config.set('directories', ['']);
+    const { provider } = newProvider();
+    await provider.refresh();
+    expect(scanForRepos).not.toHaveBeenCalled();
+    expect(provider.getRepos()).toEqual([]);
+  });
+
   it('renders one flat row per repo, labelled by folder when nested', async () => {
     const { provider } = newProvider();
     await provider.refresh();

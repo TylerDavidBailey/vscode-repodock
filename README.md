@@ -76,7 +76,7 @@ The context menu on a repo row adds **Pin Repository** and **Unpin Repository**,
 
 | Setting                    | Default                                          | Description                                           |
 | -------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| `repodock.directories`     | `[]`                                             | Folders to scan (`~` supported)                       |
+| `repodock.directories`     | `[]`                                             | Absolute folders to scan (`~` supported)              |
 | `repodock.maxDepth`        | `4`                                              | Directory levels to descend below each folder         |
 | `repodock.exclude`         | `["node_modules", "bower_components", ".Trash"]` | Directory names skipped while scanning                |
 | `repodock.hiddenRepos`     | `[]`                                             | Repos hidden via the context menu (`~` supported)     |
