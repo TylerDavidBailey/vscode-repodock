@@ -19,7 +19,7 @@ import { fakeMemento } from './helpers/memento';
 import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
-const repo = makeRepo({ path: '/root/alpha' });
+const repo = makeRepo({ path: '/srv/repos/alpha' });
 const CODE = absPath('/srv/code');
 const WORK = absPath('/srv/work');
 // under $HOME on purpose: the picker shows tildify'd labels and feeds the choice back
