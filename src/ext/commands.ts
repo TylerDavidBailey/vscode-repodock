@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { canonicalPathKey } from '../core/paths';
 import type { RepoInfo } from '../core/types';
 import { promptAddFolders, showFolderManager } from './folderPicker';
 import type { PinStore } from './pins';
@@ -64,7 +65,7 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
     vscode.commands.registerCommand(
       'repodock.pinRepo',
       withRepo(async (repo) => {
-        await pins.toggle(repo.path);
+        await pins.pin(repo.path);
         provider.rebuild();
       }),
     ),
@@ -104,11 +105,26 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
     ),
     vscode.commands.registerCommand(
       'repodock.addToWorkspace',
-      withRepo((repo) =>
-        vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, {
+      withRepo((repo) => {
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        const key = canonicalPathKey(repo.path);
+        if (folders.some((folder) => canonicalPathKey(folder.uri.fsPath) === key)) {
+          void vscode.window.showInformationMessage(
+            `${repo.name} is already a folder in this workspace.`,
+          );
+          return;
+        }
+        // false means VS Code rejected the change (an invalid folder set); the user gets
+        // no other feedback, since the explorer simply stays as it was
+        const added = vscode.workspace.updateWorkspaceFolders(folders.length, 0, {
           uri: vscode.Uri.file(repo.path),
-        }),
-      ),
+        });
+        if (!added) {
+          void vscode.window.showWarningMessage(
+            `RepoDock could not add ${repo.name} to the workspace.`,
+          );
+        }
+      }),
     ),
     vscode.commands.registerCommand(
       'repodock.copyPath',

@@ -17,7 +17,7 @@ import { absPath, makeGitState, makeRepo } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
 const STATE: GitState = makeGitState({ hasUpstream: false });
-const alpha = makeRepo({ path: '/root/alpha' });
+const alpha = makeRepo({ path: '/srv/repos/alpha' });
 vi.mocked(scanForRepos).mockImplementation(() => Promise.resolve([{ ...alpha }]));
 
 /** Queues one loadGitStates outcome: a state, a timeout, or a plain failure. */
@@ -30,7 +30,7 @@ function nextGitLoad(gitState: GitState | undefined, timedOut: boolean) {
 
 describe('RepoTreeProvider on transient git failures', () => {
   it('keeps the last known state on a timeout, drops it on a real failure', async () => {
-    state.config.set('directories', [absPath('/root')]);
+    state.config.set('directories', [absPath('/srv/repos')]);
     const provider = new RepoTreeProvider(
       new RecencyStore(fakeMemento()),
       new PinStore(fakeMemento()),

@@ -22,8 +22,8 @@ import { absPath, makeGitState, makeRepo } from './helpers/repoFixture';
 import { required } from './helpers/required';
 import { stubState as state } from './helpers/vscodeStub';
 
-const alpha = makeRepo({ path: '/root/alpha' });
-const nested = makeRepo({ path: '/root/alpha/vendor', parentRepoPath: alpha.path });
+const alpha = makeRepo({ path: '/srv/repos/alpha' });
+const nested = makeRepo({ path: '/srv/repos/alpha/vendor', parentRepoPath: alpha.path });
 
 interface Rendered {
   provider: RepoTreeProvider;
@@ -60,7 +60,7 @@ const tooltipOf = (item: vscode.TreeItem) => (item.tooltip as vscode.MarkdownStr
 
 beforeEach(() => {
   state.reset();
-  state.config.set('directories', [absPath('/root')]);
+  state.config.set('directories', [absPath('/srv/repos')]);
 });
 
 describe('contextValue', () => {
@@ -77,13 +77,13 @@ describe('contextValue', () => {
 
   it('suffixes a pinned repo', async () => {
     const { provider, pins } = await render([alpha]);
-    await pins.toggle(alpha.path);
+    await pins.pin(alpha.path);
     expect(itemFor(provider, alpha.path).contextValue).toBe('repo-pinned');
   });
 
   it('suffixes a pinned nested repo', async () => {
     const { provider, pins } = await render([alpha, nested]);
-    await pins.toggle(nested.path);
+    await pins.pin(nested.path);
     expect(itemFor(provider, nested.path).contextValue).toBe('repoNested-pinned');
   });
 });
@@ -151,13 +151,13 @@ describe('the current-repo highlight', () => {
 describe('folder sections', () => {
   it('renders a count, an expanded state and no contextValue', async () => {
     const sub = absPath('/other');
-    state.config.set('directories', [absPath('/root'), sub]);
+    state.config.set('directories', [absPath('/srv/repos'), sub]);
     state.config.set('groupByFolder', true);
     const { provider } = await render([alpha, makeRepo({ path: '/other/beta', root: sub })]);
 
     const section = required(provider.getChildren()[0], 'a folder section');
     const item = provider.getTreeItem(section);
-    expect(item.id).toBe(`folder:${absPath('/root')}`);
+    expect(item.id).toBe(`folder:${absPath('/srv/repos')}`);
     expect(item.description).toBe('1');
     expect(item.collapsibleState).toBe(2); // Expanded
     // folder rows deliberately carry no contextValue, so the /^repo/ menus skip them
@@ -174,7 +174,7 @@ describe('findRepoElement', () => {
 
   it('returns undefined for a path that was never scanned', async () => {
     const { provider } = await render([alpha]);
-    expect(provider.findRepoElement('/root/ghost')).toBeUndefined();
+    expect(provider.findRepoElement('/srv/repos/ghost')).toBeUndefined();
   });
 });
 
@@ -234,7 +234,7 @@ describe('the tooltip', () => {
 
   it('flags the pinned and current-window states', async () => {
     const { provider, pins } = await render([alpha]);
-    await pins.toggle(alpha.path);
+    await pins.pin(alpha.path);
     provider.setCurrentRepos([alpha.path]);
     expect(tooltipOf(itemFor(provider, alpha.path))).toContain('open in this window, pinned');
   });
@@ -256,7 +256,7 @@ describe('the tooltip', () => {
     // repo names, paths and branch names come off disk; a crafted one must not inject a link.
     // No '//' in the directory name: path.resolve would collapse it and the assertion below
     // would be checking a string the code never saw.
-    const evil = makeRepo({ path: '/root/[click](evil.test)' });
+    const evil = makeRepo({ path: '/srv/repos/[click](evil.test)' });
     const { provider } = await render([evil], {
       [evil.path]: makeGitState({ branch: '[branch](evil.test)' }),
     });

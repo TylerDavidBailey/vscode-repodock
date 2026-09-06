@@ -43,18 +43,21 @@ interface RowContextValues {
  * `treeProvider.ts` has to fail the `when`-clause assertions below, not slip past them.
  */
 async function renderedContextValues(): Promise<RowContextValues> {
-  const plain = makeRepo({ path: '/root/plain' });
-  const pinned = makeRepo({ path: '/root/pinned' });
-  const nested = makeRepo({ path: '/root/plain/nested', parentRepoPath: plain.path });
-  const nestedPinned = makeRepo({ path: '/root/plain/nested-pinned', parentRepoPath: plain.path });
+  const plain = makeRepo({ path: '/srv/repos/plain' });
+  const pinned = makeRepo({ path: '/srv/repos/pinned' });
+  const nested = makeRepo({ path: '/srv/repos/plain/nested', parentRepoPath: plain.path });
+  const nestedPinned = makeRepo({
+    path: '/srv/repos/plain/nested-pinned',
+    parentRepoPath: plain.path,
+  });
   const repos = [plain, pinned, nested, nestedPinned];
 
   vi.mocked(scanForRepos).mockResolvedValue(repos.map((repo) => ({ ...repo })));
-  state.config.set('directories', [absPath('/root')]);
+  state.config.set('directories', [absPath('/srv/repos')]);
 
   const pins = new PinStore(fakeMemento());
-  await pins.toggle(pinned.path);
-  await pins.toggle(nestedPinned.path);
+  await pins.pin(pinned.path);
+  await pins.pin(nestedPinned.path);
   const provider = new RepoTreeProvider(new RecencyStore(fakeMemento()), pins);
   await provider.refresh();
 

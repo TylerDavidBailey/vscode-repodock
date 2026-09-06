@@ -48,9 +48,9 @@ beforeEach(() => {
 });
 
 describe('RepoTreeProvider', () => {
-  const root = absPath('/root');
-  const alpha = makeRepo({ path: '/root/alpha' });
-  const beta = makeRepo({ path: '/root/sub/beta' });
+  const root = absPath('/srv/repos');
+  const alpha = makeRepo({ path: '/srv/repos/alpha' });
+  const beta = makeRepo({ path: '/srv/repos/sub/beta' });
 
   beforeEach(() => {
     state.config.set('directories', [root]);
@@ -72,9 +72,9 @@ describe('RepoTreeProvider', () => {
   });
 
   it('keeps the shortest relative path when overlapping roots find the same repo', async () => {
-    const sub = absPath('/root/sub');
-    // beta is found by both roots: as "sub/beta" under /root and as "beta" under /root/sub
-    const betaViaSub = makeRepo({ path: '/root/sub/beta', root: sub });
+    const sub = absPath('/srv/repos/sub');
+    // beta is found by both roots: as "sub/beta" under /srv/repos and as "beta" under /srv/repos/sub
+    const betaViaSub = makeRepo({ path: '/srv/repos/sub/beta', root: sub });
     state.config.set('directories', [root, sub]);
     scanReturns([alpha, beta, betaViaSub]);
 
@@ -102,7 +102,7 @@ describe('RepoTreeProvider', () => {
     const { provider, recency, pins } = newProvider();
     await provider.refresh();
     await recency.touch(alpha.path); // alpha is most recent, so the pin has to outrank it
-    await pins.toggle(beta.path);
+    await pins.pin(beta.path);
 
     const rows = provider.getChildren();
     expect(labels(rows)).toEqual(['beta (sub)', 'alpha']);
@@ -111,8 +111,8 @@ describe('RepoTreeProvider', () => {
   });
 
   it('groups repos into one section per folder when groupByFolder is set', async () => {
-    const sub = absPath('/root/sub');
-    const betaViaSub = makeRepo({ path: '/root/sub/beta', root: sub });
+    const sub = absPath('/srv/repos/sub');
+    const betaViaSub = makeRepo({ path: '/srv/repos/sub/beta', root: sub });
     state.config.set('directories', [root, sub]);
     state.config.set('groupByFolder', true);
     scanReturns([alpha, beta, betaViaSub]);

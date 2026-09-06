@@ -33,21 +33,20 @@ export class PinStore {
     return this.all().has(canonicalPathKey(repoPath));
   }
 
-  async toggle(repoPath: string): Promise<void> {
+  /**
+   * Pins, and only pins: a no-op on an already pinned repo. The Pin and Unpin commands
+   * are shown by a `contextValue` that can be stale by the time one runs (another window
+   * changed the pin, or the row has not re-rendered yet), so neither may act as a toggle.
+   */
+  async pin(repoPath: string): Promise<void> {
     const pins = new Set(this.all());
     const key = canonicalPathKey(repoPath);
-    if (pins.has(key)) {
-      pins.delete(key);
-    } else {
-      pins.add(key);
-    }
+    if (pins.has(key)) return;
+    pins.add(key);
     await this.memento.update(KEY, [...pins]);
   }
 
-  /**
-   * Unpins without the toggle's other half: the Unpin command must never pin, since its
-   * menu visibility depends on a `contextValue` that can be stale by the time it runs.
-   */
+  /** Unpins, and only unpins: a no-op on a repo that is not pinned. See `pin`. */
   async unpin(repoPath: string): Promise<void> {
     const pins = new Set(this.all());
     if (!pins.delete(canonicalPathKey(repoPath))) return;
