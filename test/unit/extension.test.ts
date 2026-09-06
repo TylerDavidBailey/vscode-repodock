@@ -197,6 +197,67 @@ describe('refreshing when the user comes back', () => {
   });
 });
 
+describe('activation while the view opens', () => {
+  /**
+   * Activates with scans that stay pending until finished by hand, in the order they
+   * were started, so a test can decide which of two overlapping scans lands first.
+   */
+  function activateWithPendingScans() {
+    state.config.set('directories', [absPath('/root')]);
+    state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
+    const pending: ((repos: (typeof alpha)[]) => void)[] = [];
+    vi.mocked(scanForRepos).mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve)),
+    );
+    const api = activate(fakeExtensionContext());
+    const finishScan = (index: number) => {
+      required(pending[index], `scan ${index}`)([{ ...alpha }]);
+      // api.refresh() below chains a fresh scan off the initial one; let that one resolve
+      vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
+    };
+    return { api, finishScan };
+  }
+
+  it('does not restart the initial scan when the view becomes visible during it', async () => {
+    const { api, finishScan } = activateWithPendingScans();
+    await treeView().fireVisibility(true);
+    expect(scanForRepos).toHaveBeenCalledTimes(1);
+
+    finishScan(0);
+    await api.refresh();
+    expect(api.getRepos().map((repo) => repo.path)).toEqual([alpha.path]);
+  });
+
+  it('still reveals and records the current repo after a focus event mid-scan', async () => {
+    const { api, finishScan } = activateWithPendingScans();
+    await state.fireWindowState(true);
+
+    finishScan(0);
+    await api.refresh();
+
+    expect(treeView().reveal).toHaveBeenCalledTimes(1);
+    const item = api.provider.getTreeItem(
+      required(api.provider.findRepoElement(alpha.path), 'an element for alpha'),
+    );
+    expect(item.description).toBe('now');
+  });
+
+  it('keeps the scanning context set until every overlapping refresh has finished', async () => {
+    const { api, finishScan } = activateWithPendingScans();
+    // a settings change while the initial scan runs starts a second one that supersedes it
+    await state.fireConfigChange('directories');
+    expect(scanForRepos).toHaveBeenCalledTimes(2);
+    finishScan(0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // the first scan has come back, but the second is still running
+    expect(state.contextKeys.get('repodock.scanning')).toBe(true);
+
+    finishScan(1);
+    await api.refresh();
+    expect(state.contextKeys.get('repodock.scanning')).toBe(false);
+  });
+});
+
 describe('the current workspace', () => {
   it('highlights the repo open in this window', async () => {
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];

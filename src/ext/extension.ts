@@ -167,7 +167,10 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
  * would flicker the welcome view for users with no repos.
  */
 async function refreshWithProgress(provider: RepoTreeProvider): Promise<void> {
-  await vscode.commands.executeCommand('setContext', 'repodock.scanning', true);
+  // not awaited: the scan has to start before this function yields, so a focus or
+  // visibility event arriving meanwhile joins it instead of starting a second one.
+  // VS Code runs commands in call order, so the clear below still lands after this.
+  void vscode.commands.executeCommand('setContext', 'repodock.scanning', true);
   try {
     await provider.refresh();
   } finally {

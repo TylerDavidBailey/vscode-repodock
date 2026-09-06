@@ -78,6 +78,8 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   /** One element per scan root, keyed by canonical path; empty while the list is flat. */
   private readonly folderElements = new Map<string, FolderElement>();
   private refreshGeneration = 0;
+  /** The newest scan still running, so callers can wait for it instead of starting another. */
+  private inFlight?: Promise<void>;
   private currentRepos = new Set<string>();
   private warnedGitMissing = false;
   private lastGitLoad = 0;
@@ -101,8 +103,28 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     this.currentRepos = new Set(paths.map(canonicalPathKey));
   }
 
-  /** Rescans every configured directory, then reloads git state incrementally. */
+  /**
+   * Rescans every configured directory, then reloads git state incrementally. Resolves
+   * once the repo list is current: a refresh superseded by a newer one waits for that
+   * newer one instead of resolving early against the list it was asked to replace.
+   */
   async refresh(): Promise<void> {
+    const run = this.runRefresh();
+    this.inFlight = run;
+    try {
+      await run;
+    } finally {
+      if (this.inFlight === run) this.inFlight = undefined;
+    }
+    await this.settle();
+  }
+
+  /** Waits until no refresh is running, following each one superseded by a newer one. */
+  private async settle(): Promise<void> {
+    while (this.inFlight) await this.inFlight;
+  }
+
+  private async runRefresh(): Promise<void> {
     const generation = ++this.refreshGeneration;
     const config = getConfig();
     const results = await Promise.all(
@@ -131,10 +153,14 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   /**
    * Focus/visibility refresh: rescans the file system when the last scan is old
    * enough (so fresh clones appear), otherwise just reloads git state. Both paths
-   * are throttled, so bursty events can call this freely.
+   * are throttled, so bursty events can call this freely. A scan already running
+   * (the initial one, typically) is joined rather than restarted: restarting would
+   * discard its results, and the window opening is exactly when these events fire.
    */
   async refreshIfStale(): Promise<void> {
-    if (Date.now() - this.lastScan >= SCAN_REFRESH_MIN_INTERVAL_MS) {
+    if (this.inFlight) {
+      await this.settle();
+    } else if (Date.now() - this.lastScan >= SCAN_REFRESH_MIN_INTERVAL_MS) {
       await this.refresh();
     } else {
       await this.refreshGitStates();
