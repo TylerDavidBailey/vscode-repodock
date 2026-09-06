@@ -4,7 +4,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { GitState, RepoInfo } from '../../../src/core/types';
 
-const DEFAULT_ROOT = '/root';
+// Not `/root`, or any other path that is somebody's home directory: `tildify` folds the home
+// directory to `~`, so a fixture under it renders differently on a machine (a container
+// running as root, say) whose $HOME it happens to match, and the suite fails only there.
+const DEFAULT_ROOT = '/srv/repos';
 
 /**
  * A POSIX-looking test path in the platform's own form — `/srv/code` becomes `D:\srv\code`
