@@ -70,7 +70,7 @@
       },
       {
         "view": "repodock.repos",
-        "contents": "No git repositories found in the folders you added.\n[Add Another Folder](command:repodock.addFolder)\nIf repositories are missing, check the repodock.maxDepth and repodock.exclude settings.",
+        "contents": "No git repositories found in the folders you added.\n[Add Another Folder](command:repodock.addFolder)\nIf repositories are missing, check the repodock.maxDepth, repodock.exclude, and repodock.hiddenRepos settings.",
         "when": "!repodock.noDirectories && !repodock.scanning"
       }
     ],
