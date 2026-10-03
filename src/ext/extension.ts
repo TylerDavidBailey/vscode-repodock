@@ -140,6 +140,8 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     if (currentRepo) {
       // touch the scanned path, not the workspace's, so recency keys stay consistent
       await recency.touch(currentRepo.path);
+      // the scan already rendered with the old order, and nothing else re-sorts the view
+      provider.rebuild();
     }
     if (view.visible) {
       await revealCurrent();

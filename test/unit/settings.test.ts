@@ -134,6 +134,90 @@ describe('getConfig', () => {
   });
 });
 
+describe('getConfig with malformed settings', () => {
+  // the schema is advisory: VS Code passes a hand-edited value through unchanged, and
+  // getConfig runs inside activate, so a throw here stops the extension from starting
+  it.each(['~/code', 42, { path: '~/code' }, null])(
+    'reads a directories value of %j as no folders',
+    (value) => {
+      configStore.set('directories', value);
+      expect(getConfig().directories).toEqual([]);
+    },
+  );
+
+  it('reads a hiddenRepos value that is not a list as nothing hidden', () => {
+    configStore.set('hiddenRepos', '~/code/repo');
+    expect(getConfig().hiddenRepos).toEqual([]);
+  });
+
+  it.each([5, 'node_modules', null])('falls back to the default exclude list for %j', (value) => {
+    configStore.set('exclude', value);
+    expect(getConfig().exclude).toEqual(['node_modules', 'bower_components', '.Trash']);
+  });
+
+  it('drops exclude entries that are not strings', () => {
+    configStore.set('exclude', ['vendor', 1, null]);
+    expect(getConfig().exclude).toEqual(['vendor']);
+  });
+
+  it.each([
+    [0, 1],
+    [-3, 1],
+    [1000, 16],
+    [2.9, 2],
+    ['abc', 4],
+    [null, 4],
+    [Number.NaN, 4],
+  ])('reads a maxDepth of %j as %i', (value, expected) => {
+    configStore.set('maxDepth', value);
+    expect(getConfig().maxDepth).toBe(expected);
+  });
+});
+
+describe('overlapping list writes', () => {
+  it('keeps both repos when two are hidden before either write lands', async () => {
+    await Promise.all([
+      hideRepo(path.join(home, 'code', 'one')),
+      hideRepo(path.join(home, 'code', 'two')),
+    ]);
+    expect(configStore.get('hiddenRepos')).toEqual(['~/code/one', '~/code/two']);
+  });
+
+  it('keeps both folders when two are added before either write lands', async () => {
+    await Promise.all([
+      addDirectories([path.join(home, 'code')]),
+      addDirectories([path.join(home, 'work')]),
+    ]);
+    expect(configStore.get('directories')).toEqual(['~/code', '~/work']);
+  });
+});
+
+describe('writers with malformed stored values', () => {
+  it('adds a directory when the stored value is not a list', async () => {
+    configStore.set('directories', '~/code');
+    await addDirectories([path.join(home, 'work')]);
+    expect(configStore.get('directories')).toEqual(['~/work']);
+  });
+
+  it('adds a directory next to entries that are not strings', async () => {
+    configStore.set('directories', [42, '~/code']);
+    await addDirectories([path.join(home, 'work')]);
+    expect(configStore.get('directories')).toEqual(['~/code', '~/work']);
+  });
+
+  it('removes a directory from a list that holds entries that are not strings', async () => {
+    configStore.set('directories', [42, '~/code', '~/work']);
+    await removeDirectory(path.join(home, 'code'));
+    expect(configStore.get('directories')).toEqual(['~/work']);
+  });
+
+  it('hides a repo when the stored value is not a list', async () => {
+    configStore.set('hiddenRepos', 7);
+    await hideRepo(path.join(home, 'code', 'repo'));
+    expect(configStore.get('hiddenRepos')).toEqual(['~/code/repo']);
+  });
+});
+
 describe('addDirectories', () => {
   it('appends new directories tildified', async () => {
     configStore.set('directories', ['~/code']);
