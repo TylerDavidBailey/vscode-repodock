@@ -154,62 +154,83 @@ function scopesHolding(
   return scopes;
 }
 
+let pendingListWrite: Promise<unknown> = Promise.resolve();
+
+/**
+ * Runs list writers one at a time. Each reads the stored list, changes it, and writes it
+ * back, and `update` resolves only once the new value is readable, so two writers that
+ * overlap would both start from the old list and the second would undo the first.
+ */
+function inWriteOrder<T>(write: () => Promise<T>): Promise<T> {
+  const result = pendingListWrite.then(write, write);
+  pendingListWrite = result.catch(() => undefined);
+  return result;
+}
+
 /**
  * Adds scan roots, skipping any already configured. Stores them tildified, in the scope
  * whose list is in effect (see `effectiveTarget`). Like every writer here, the update fires
  * the configuration listener in `extension.ts`, which rescans; callers need not refresh
  * the tree themselves.
  */
-export async function addDirectories(paths: string[]): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const existing = storedStrings(config.get<unknown>('directories'));
-  const merged = [...existing];
-  for (const dir of paths.map(tildify)) {
-    const key = canonicalPathKey(expandPath(dir));
-    if (!merged.some((entry) => canonicalPathKey(expandPath(entry)) === key)) merged.push(dir);
-  }
-  await config.update('directories', merged, effectiveTarget(config, 'directories'));
+export function addDirectories(paths: string[]): Promise<void> {
+  return inWriteOrder(async () => {
+    const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+    const existing = storedStrings(config.get<unknown>('directories'));
+    const merged = [...existing];
+    for (const dir of paths.map(tildify)) {
+      const key = canonicalPathKey(expandPath(dir));
+      if (!merged.some((entry) => canonicalPathKey(expandPath(entry)) === key)) merged.push(dir);
+    }
+    await config.update('directories', merged, effectiveTarget(config, 'directories'));
+  });
 }
 
 /**
  * Removes a scan root from every scope that lists it, so no lower-priority scope can bring
  * it back. Matches by canonical key, so stored `~` entries are found too.
  */
-export async function removeDirectory(absolutePath: string): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const key = canonicalPathKey(absolutePath);
-  const info = config.inspect<unknown>('directories');
-  for (const scope of scopesHolding(config, 'directories')) {
-    const stored = storedStrings(
-      scope === vscode.ConfigurationTarget.Workspace ? info?.workspaceValue : info?.globalValue,
-    );
-    const remaining = stored.filter((entry) => canonicalPathKey(expandPath(entry)) !== key);
-    if (remaining.length !== stored.length) await config.update('directories', remaining, scope);
-  }
+export function removeDirectory(absolutePath: string): Promise<void> {
+  return inWriteOrder(async () => {
+    const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+    const key = canonicalPathKey(absolutePath);
+    const info = config.inspect<unknown>('directories');
+    for (const scope of scopesHolding(config, 'directories')) {
+      const stored = storedStrings(
+        scope === vscode.ConfigurationTarget.Workspace ? info?.workspaceValue : info?.globalValue,
+      );
+      const remaining = stored.filter((entry) => canonicalPathKey(expandPath(entry)) !== key);
+      if (remaining.length !== stored.length) await config.update('directories', remaining, scope);
+    }
+  });
 }
 
 /**
  * Hides one repository from the tree, which also hides any repos nested inside it. Written
  * to the scope whose list is in effect (see `effectiveTarget`).
  */
-export async function hideRepo(absolutePath: string): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const existing = storedStrings(config.get<unknown>('hiddenRepos'));
-  const key = canonicalPathKey(absolutePath);
-  if (existing.some((entry) => canonicalPathKey(expandPath(entry)) === key)) return;
-  await config.update(
-    'hiddenRepos',
-    [...existing, tildify(absolutePath)],
-    effectiveTarget(config, 'hiddenRepos'),
-  );
+export function hideRepo(absolutePath: string): Promise<void> {
+  return inWriteOrder(async () => {
+    const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+    const existing = storedStrings(config.get<unknown>('hiddenRepos'));
+    const key = canonicalPathKey(absolutePath);
+    if (existing.some((entry) => canonicalPathKey(expandPath(entry)) === key)) return;
+    await config.update(
+      'hiddenRepos',
+      [...existing, tildify(absolutePath)],
+      effectiveTarget(config, 'hiddenRepos'),
+    );
+  });
 }
 
 /** Clears the hidden list in every scope that has one, so nothing stays hidden. */
-export async function unhideAllRepos(): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  for (const scope of scopesHolding(config, 'hiddenRepos')) {
-    await config.update('hiddenRepos', undefined, scope);
-  }
+export function unhideAllRepos(): Promise<void> {
+  return inWriteOrder(async () => {
+    const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+    for (const scope of scopesHolding(config, 'hiddenRepos')) {
+      await config.update('hiddenRepos', undefined, scope);
+    }
+  });
 }
 
 export async function setSortOrder(order: SortOrder): Promise<void> {

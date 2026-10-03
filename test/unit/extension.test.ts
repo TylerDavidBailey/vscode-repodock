@@ -281,6 +281,28 @@ describe('the current workspace', () => {
     expect(item.description).toBe('now');
   });
 
+  it('re-renders after recording the current repo, so it moves to the top of a recent sort', async () => {
+    state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
+    state.config.set('directories', [absPath('/srv/repos')]);
+    vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
+    const context = fakeExtensionContext();
+    const events: string[] = [];
+    const update = context.globalState.update.bind(context.globalState);
+    context.globalState.update = async (key: string, value: unknown) => {
+      await update(key, value);
+      events.push('touch');
+    };
+
+    const api = activate(context);
+    api.provider.onDidChangeTreeData(() => events.push('render'));
+    await vi.waitFor(() => {
+      expect(events).toContain('touch');
+    });
+    await Promise.resolve();
+
+    expect(events.at(-1)).toBe('render');
+  });
+
   it('leaves recency alone when this window is not in a scanned repo', async () => {
     state.workspaceFolders = [{ uri: { fsPath: absPath('/somewhere/else') } }];
     const api = await activateWithAlpha();

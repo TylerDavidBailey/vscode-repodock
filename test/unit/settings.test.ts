@@ -174,6 +174,24 @@ describe('getConfig with malformed settings', () => {
   });
 });
 
+describe('overlapping list writes', () => {
+  it('keeps both repos when two are hidden before either write lands', async () => {
+    await Promise.all([
+      hideRepo(path.join(home, 'code', 'one')),
+      hideRepo(path.join(home, 'code', 'two')),
+    ]);
+    expect(configStore.get('hiddenRepos')).toEqual(['~/code/one', '~/code/two']);
+  });
+
+  it('keeps both folders when two are added before either write lands', async () => {
+    await Promise.all([
+      addDirectories([path.join(home, 'code')]),
+      addDirectories([path.join(home, 'work')]),
+    ]);
+    expect(configStore.get('directories')).toEqual(['~/code', '~/work']);
+  });
+});
+
 describe('writers with malformed stored values', () => {
   it('adds a directory when the stored value is not a list', async () => {
     configStore.set('directories', '~/code');
