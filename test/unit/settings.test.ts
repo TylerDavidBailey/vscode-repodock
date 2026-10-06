@@ -134,6 +134,9 @@ describe('getConfig', () => {
   });
 });
 
+/** A home-relative path the way `tildify` stores it, which uses the platform's separator. */
+const written = (...segments: string[]): string => '~' + path.sep + path.join(...segments);
+
 describe('getConfig with malformed settings', () => {
   // the schema is advisory: VS Code passes a hand-edited value through unchanged, and
   // getConfig runs inside activate, so a throw here stops the extension from starting
@@ -180,7 +183,10 @@ describe('overlapping list writes', () => {
       hideRepo(path.join(home, 'code', 'one')),
       hideRepo(path.join(home, 'code', 'two')),
     ]);
-    expect(configStore.get('hiddenRepos')).toEqual(['~/code/one', '~/code/two']);
+    expect(configStore.get('hiddenRepos')).toEqual([
+      written('code', 'one'),
+      written('code', 'two'),
+    ]);
   });
 
   it('keeps both folders when two are added before either write lands', async () => {
@@ -188,7 +194,7 @@ describe('overlapping list writes', () => {
       addDirectories([path.join(home, 'code')]),
       addDirectories([path.join(home, 'work')]),
     ]);
-    expect(configStore.get('directories')).toEqual(['~/code', '~/work']);
+    expect(configStore.get('directories')).toEqual([written('code'), written('work')]);
   });
 });
 
@@ -196,13 +202,13 @@ describe('writers with malformed stored values', () => {
   it('adds a directory when the stored value is not a list', async () => {
     configStore.set('directories', '~/code');
     await addDirectories([path.join(home, 'work')]);
-    expect(configStore.get('directories')).toEqual(['~/work']);
+    expect(configStore.get('directories')).toEqual([written('work')]);
   });
 
   it('adds a directory next to entries that are not strings', async () => {
     configStore.set('directories', [42, '~/code']);
     await addDirectories([path.join(home, 'work')]);
-    expect(configStore.get('directories')).toEqual(['~/code', '~/work']);
+    expect(configStore.get('directories')).toEqual(['~/code', written('work')]);
   });
 
   it('removes a directory from a list that holds entries that are not strings', async () => {
@@ -214,7 +220,7 @@ describe('writers with malformed stored values', () => {
   it('hides a repo when the stored value is not a list', async () => {
     configStore.set('hiddenRepos', 7);
     await hideRepo(path.join(home, 'code', 'repo'));
-    expect(configStore.get('hiddenRepos')).toEqual(['~/code/repo']);
+    expect(configStore.get('hiddenRepos')).toEqual([written('code', 'repo')]);
   });
 });
 
