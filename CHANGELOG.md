@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.3...v1.1.4) (2026-11-01)
+
+
+### Bug Fixes
+
+* **deps:** patch npm audit advisories in dev dependencies ([#59](https://github.com/TylerDavidBailey/vscode-repodock/issues/59)) ([6c93c68](https://github.com/TylerDavidBailey/vscode-repodock/commit/6c93c68a31d409fcde87ed2121b6ec96b06c20ad))
+
 ## [1.1.3](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.2...v1.1.3) (2026-10-06)
 
 
