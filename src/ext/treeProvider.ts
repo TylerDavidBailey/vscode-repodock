@@ -10,6 +10,7 @@ import {
   formatRelativeTime,
   groupReposByRoot,
   repoLabel,
+  repoLabels,
   sameRepoList,
   sortRepos,
 } from '../core/sorting';
@@ -246,10 +247,12 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     return dedupeRepos(filterNestedRepos(this.repos, getConfig().showNestedRepos));
   }
 
+  /** Rows for repos that sit side by side, so their labels are told apart within `repos`. */
   private sortedRepoElements(repos: RepoInfo[]): TreeElement[] {
     const config = getConfig();
+    const labels = repoLabels(repos);
     return sortRepos(repos, config.sortOrder, this.recency.all(), this.pins.all()).map((repo) =>
-      this.repoElement(repo),
+      this.repoElement(repo, labels.get(repo.path)),
     );
   }
 
@@ -278,11 +281,17 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     const cached = this.repoElements.get(repoPath);
     if (cached) return cached;
     const repo = this.repos.find((candidate) => candidate.path === repoPath);
-    return repo && this.repoElement(repo);
+    if (!repo) return undefined;
+    // label it the way its row will be, among the rows it will sit next to
+    const siblings =
+      this.folderGrouping()?.find((folder) =>
+        folder.repos.some((candidate) => candidate.path === repoPath),
+      )?.repos ?? this.visibleRepos();
+    return this.repoElement(repo, repoLabels(siblings).get(repoPath));
   }
 
-  private repoElement(repo: RepoInfo): TreeElement {
-    const element: TreeElement = { repo, label: repoLabel(repo) };
+  private repoElement(repo: RepoInfo, label: string = repoLabel(repo)): TreeElement {
+    const element: TreeElement = { repo, label };
     this.repoElements.set(repo.path, element);
     return element;
   }

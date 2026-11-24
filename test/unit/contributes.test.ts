@@ -11,7 +11,7 @@ import { registerCommands } from '../../src/ext/commands';
 import { activate } from '../../src/ext/extension';
 import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
-import { getConfig } from '../../src/ext/settings';
+import { getConfig, RESTRICTED_SETTINGS } from '../../src/ext/settings';
 import { RepoTreeProvider } from '../../src/ext/treeProvider';
 import contributes from '../../package.json';
 import { fakeExtensionContext } from './helpers/extensionContext';
@@ -222,6 +222,17 @@ describe('configuration defaults', () => {
 
   it('offers exactly the sort orders the setting enumerates', () => {
     expect(configuration.properties['repodock.sortOrder'].enum).toEqual(['recent', 'alphabetical']);
+  });
+});
+
+describe('restricted configurations', () => {
+  // VS Code enforces the manifest list; settings.ts picks a write scope from its own copy.
+  // If they drift, a Restricted Mode write lands in a scope VS Code is not reading.
+  it('match the settings the writers treat as ignored in Restricted Mode', () => {
+    const declared = contributes.capabilities.untrustedWorkspaces.restrictedConfigurations;
+    expect([...declared].sort()).toEqual(
+      [...RESTRICTED_SETTINGS].map((key) => `repodock.${key}`).sort(),
+    );
   });
 });
 

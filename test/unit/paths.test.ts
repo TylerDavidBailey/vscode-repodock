@@ -1,5 +1,8 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { canonicalPathKey } from '../../src/core/paths';
+import { canonicalPathKey, isMissingDirectory } from '../../src/core/paths';
 
 const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 
@@ -36,5 +39,39 @@ describe('canonicalPathKey', () => {
       pretendPlatform(platform);
       expect(canonicalPathKey('/home/user/repos')).toBe(canonicalPathKey('/home/user/repos'));
     }
+  });
+});
+
+describe('isMissingDirectory', () => {
+  let dir: string | undefined;
+
+  afterEach(async () => {
+    if (dir !== undefined) await fs.rm(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it('is false for a directory that exists', async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-'));
+    expect(await isMissingDirectory(dir)).toBe(false);
+  });
+
+  it('is true once the directory is deleted', async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-'));
+    const gone = path.join(dir, 'deleted');
+    expect(await isMissingDirectory(gone)).toBe(true);
+  });
+
+  it('is true when a file took the place of the directory', async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'repodock-'));
+    const file = path.join(dir, 'repo');
+    await fs.writeFile(file, '');
+    expect(await isMissingDirectory(file)).toBe(true);
+    // ENOTDIR, not ENOENT: the path runs through a file
+    expect(await isMissingDirectory(path.join(file, 'nested'))).toBe(true);
+  });
+
+  it('is false when the check itself fails, since that says nothing about the directory', async () => {
+    // a NUL byte makes stat reject before it reaches the file system
+    expect(await isMissingDirectory('bad\0path')).toBe(false);
   });
 });

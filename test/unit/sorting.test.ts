@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   dedupeRepos,
@@ -7,6 +8,7 @@ import {
   formatRelativeTime,
   groupReposByRoot,
   repoLabel,
+  repoLabels,
   repoPrefix,
   sameRepoList,
   sortRepos,
@@ -46,6 +48,78 @@ describe('repoLabel', () => {
   it('is just the name for top-level repos and the scan root itself', () => {
     expect(repoLabel(makeRepo('ginkgo'))).toBe('ginkgo');
     expect(repoLabel(makeRepo(''))).toBe('repos');
+  });
+});
+
+describe('repoLabels', () => {
+  /**
+   * A repo at `repoPath` found under the scan root `root`. Written POSIX-style and stored
+   * with the platform's separator, which is what the scanner produces and what the label
+   * code splits on.
+   */
+  function repoAt(repoPath: string, root: string): RepoInfo {
+    const native = (posixPath: string) => posixPath.split('/').join(path.sep);
+    return {
+      name: repoPath.split('/').pop() ?? repoPath,
+      path: native(repoPath),
+      root: native(root),
+      relPath: repoPath === root ? '' : repoPath.slice(root.length + 1),
+    };
+  }
+  const labelsOf = (repos: RepoInfo[]) => repos.map((repo) => repoLabels(repos).get(repo.path));
+
+  it('matches repoLabel while every label is already distinct', () => {
+    const repos = [makeRepo('ginkgo'), makeRepo('abc/ginkgo'), makeRepo('todo'), makeRepo('')];
+    expect(labelsOf(repos)).toEqual(repos.map(repoLabel));
+  });
+
+  it('names the folder of same-named repos found under different scan roots', () => {
+    const repos = [
+      repoAt('/home/user/work/web-app', '/home/user/work'),
+      repoAt('/home/user/personal/web-app', '/home/user/personal'),
+      repoAt('/home/user/work/api', '/home/user/work'),
+    ];
+    expect(labelsOf(repos)).toEqual(['web-app (work)', 'web-app (personal)', 'api']);
+  });
+
+  it('goes up as many levels as it takes when the folders share a name too', () => {
+    const repos = [
+      repoAt('/home/user/acme/src/web-app', '/home/user/acme/src'),
+      repoAt('/home/user/globex/src/web-app', '/home/user/globex/src'),
+      repoAt('/home/user/other/web-app', '/home/user/other'),
+    ];
+    expect(labelsOf(repos)).toEqual([
+      'web-app (acme/src)',
+      'web-app (globex/src)',
+      'web-app (user/other)',
+    ]);
+  });
+
+  it('extends a nested label past the scan root, keeping the part inside it', () => {
+    const repos = [
+      repoAt('/home/user/work/api/vendor/sdk', '/home/user/work'),
+      repoAt('/home/user/personal/api/vendor/sdk', '/home/user/personal'),
+    ];
+    expect(repos.map(repoLabel)).toEqual(['sdk (api/vendor)', 'sdk (api/vendor)']);
+    expect(labelsOf(repos)).toEqual(['sdk (work/api/vendor)', 'sdk (personal/api/vendor)']);
+  });
+
+  it('tells a scan root that is itself a repo from a same-named repo elsewhere', () => {
+    const repos = [
+      repoAt('/home/user/solo/web-app', '/home/user/solo/web-app'),
+      repoAt('/home/user/work/web-app', '/home/user/work'),
+    ];
+    expect(labelsOf(repos)).toEqual(['web-app (solo)', 'web-app (work)']);
+  });
+
+  it('leaves a repo at the file system root unqualified', () => {
+    const repos = [repoAt('/web-app', '/'), repoAt('/srv/web-app', '/srv')];
+    expect(labelsOf(repos)).toEqual(['web-app', 'web-app (srv)']);
+  });
+
+  it('terminates on a list that holds the same path twice', () => {
+    const repo = repoAt('/home/user/work/web-app', '/home/user/work');
+    expect(repoLabels([repo, { ...repo }]).get(repo.path)).toBe('web-app (home/user/work)');
   });
 });
 
@@ -190,6 +264,23 @@ describe('sortRepos', () => {
       'abc/ginkgo',
       'ginkgo',
     ]);
+  });
+
+  it('orders same-named repos from different scan roots by path, not by scan order', () => {
+    const under = (root: string): RepoInfo => ({
+      name: 'web-app',
+      path: `${root}/web-app`,
+      root,
+      relPath: 'web-app',
+    });
+    // work is configured first, so it is scanned first; personal still sorts ahead of it
+    const twins = [under('/home/user/work'), under('/home/user/personal')];
+    for (const order of ['alphabetical', 'recent'] as const) {
+      expect(sortRepos(twins, order, new Map(), none).map((repo) => repo.root)).toEqual([
+        '/home/user/personal',
+        '/home/user/work',
+      ]);
+    }
   });
 
   it('floats pinned repos above everything, in both orders', () => {

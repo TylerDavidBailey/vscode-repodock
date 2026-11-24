@@ -24,6 +24,53 @@ export function repoLabel(repo: RepoInfo): string {
 }
 
 /**
+ * The directories above a repo, nearest last, as many as `levels` asks for. Joined with
+ * '/' on every platform, to match `relPath` and the labels built from it.
+ */
+function parentContext(repo: RepoInfo, levels: number): string {
+  return path.dirname(repo.path).split(path.sep).filter(Boolean).slice(-levels).join('/');
+}
+
+/**
+ * Labels for repos listed side by side, keyed by repo path. Each starts as `repoLabel`,
+ * which only looks inside the repo's own scan root: two roots holding a same-named repo
+ * both yield "web-app", and nothing but the tooltip tells the rows apart. Repos that
+ * collide get the directories above them spelled out instead, as many levels as it takes
+ * to differ ("web-app (work)" and "web-app (personal)").
+ */
+export function repoLabels(repos: readonly RepoInfo[]): Map<string, string> {
+  const byLabel = new Map<string, RepoInfo[]>();
+  for (const repo of repos) {
+    const label = repoLabel(repo);
+    const sharing = byLabel.get(label);
+    if (sharing) {
+      sharing.push(repo);
+    } else {
+      byLabel.set(label, [repo]);
+    }
+  }
+
+  const labels = new Map<string, string>();
+  for (const [label, sharing] of byLabel) {
+    if (sharing.length === 1) {
+      for (const repo of sharing) labels.set(repo.path, label);
+      continue;
+    }
+    // distinct paths differ somewhere above the repo, so some depth separates them; the
+    // deepest path bounds the search for the case where the list holds the same path twice
+    const deepest = Math.max(...sharing.map((repo) => repo.path.split(path.sep).length));
+    let levels = 1;
+    const contexts = () => sharing.map((repo) => parentContext(repo, levels));
+    while (levels < deepest && new Set(contexts()).size < sharing.length) levels++;
+    for (const repo of sharing) {
+      const context = parentContext(repo, levels);
+      labels.set(repo.path, context === '' ? repo.name : `${repo.name} (${context})`);
+    }
+  }
+  return labels;
+}
+
+/**
  * Drops hidden repositories from a scan result. Hiding a repo also hides every repo
  * inside its directory, which would otherwise dangle without a parent in the grouped
  * view. Matching by path prefix (instead of walking parentRepoPath chains) also
@@ -127,8 +174,10 @@ export function groupReposByRoot(repos: RepoInfo[], rootOrder: readonly string[]
 /**
  * Orders the flat list: pinned repos first, then the rest; each group by most recently
  * opened (falling back to name) or purely by name. Name sorting compares the repo name
- * first and relPath second, so same-named repos end up next to each other. `recency`
- * and `pinned` are keyed by canonical path key.
+ * first and relPath second, so same-named repos end up next to each other. Two scan roots
+ * can hold a repo with the same name and relPath; the full path settles those, so their
+ * order follows the folder names in their labels rather than the order roots were scanned.
+ * `recency` and `pinned` are keyed by canonical path key.
  */
 export function sortRepos(
   repos: RepoInfo[],
@@ -137,7 +186,9 @@ export function sortRepos(
   pinned: ReadonlySet<string>,
 ): RepoInfo[] {
   const byName = (a: RepoInfo, b: RepoInfo) =>
-    a.name.localeCompare(b.name) || a.relPath.localeCompare(b.relPath);
+    a.name.localeCompare(b.name) ||
+    a.relPath.localeCompare(b.relPath) ||
+    a.path.localeCompare(b.path);
   const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path)) ?? 0;
   const compare =
     order === 'recent'

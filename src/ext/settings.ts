@@ -140,18 +140,28 @@ export function tildify(p: string): string {
 }
 
 /**
+ * The settings VS Code ignores the workspace value of in Restricted Mode, without the
+ * section prefix. Mirrors `capabilities.untrustedWorkspaces.restrictedConfigurations` in
+ * `package.json`, which is the list VS Code enforces; every other setting keeps its
+ * workspace value in an untrusted workspace.
+ */
+export const RESTRICTED_SETTINGS: ReadonlySet<string> = new Set(['directories', 'exclude']);
+
+/**
  * The scope whose value `get` currently returns for `key`, so that a write lands where the
  * user will see it. VS Code resolves settings workspace-first, so writing to the global
  * scope while the workspace holds a value changes nothing visible. A Restricted Mode
- * workspace is the exception: its workspace values are ignored, so its global scope is the
- * one in effect. Every setting here is window-scoped, so folder values never apply.
+ * workspace is the exception, but only for `RESTRICTED_SETTINGS`: those workspace values are
+ * ignored, so the global scope is the one in effect. Every setting here is window-scoped,
+ * so folder values never apply.
  */
 function effectiveTarget(
   config: vscode.WorkspaceConfiguration,
   key: string,
 ): vscode.ConfigurationTarget {
   const hasWorkspaceValue = config.inspect(key)?.workspaceValue !== undefined;
-  return hasWorkspaceValue && vscode.workspace.isTrusted
+  const isWorkspaceValueIgnored = !vscode.workspace.isTrusted && RESTRICTED_SETTINGS.has(key);
+  return hasWorkspaceValue && !isWorkspaceValueIgnored
     ? vscode.ConfigurationTarget.Workspace
     : vscode.ConfigurationTarget.Global;
 }

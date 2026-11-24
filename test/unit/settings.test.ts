@@ -372,12 +372,41 @@ describe('writing where the workspace supplies the value', () => {
     expect(workspaceStore.has('sortOrder')).toBe(false);
   });
 
-  it('writes globally in an untrusted workspace, whose workspace values VS Code ignores', async () => {
+  it('adds a directory globally in Restricted Mode, which ignores the workspace list', async () => {
+    state.workspaceTrusted = false;
+    configStore.set('directories', ['~/global']);
+    workspaceStore.set('directories', ['~/work']);
+    await addDirectories([path.join(home, 'projects')]);
+    expect(configStore.get('directories')).toEqual(['~/global', '~' + path.sep + 'projects']);
+    expect(workspaceStore.get('directories')).toEqual(['~/work']);
+    expect(getConfig().directories).toContain(path.join(home, 'projects'));
+  });
+
+  // Restricted Mode ignores only the settings package.json lists as restricted. The rest
+  // keep their workspace value, so a global write would leave the tree exactly as it was.
+  it('hides a repo in the workspace list in Restricted Mode, where that list still applies', async () => {
+    state.workspaceTrusted = false;
+    workspaceStore.set('hiddenRepos', ['~/code/beta']);
+    await hideRepo(path.join(home, 'code', 'alpha'));
+    expect(workspaceStore.get('hiddenRepos')).toEqual([
+      '~/code/beta',
+      '~' + path.sep + path.join('code', 'alpha'),
+    ]);
+    expect(configStore.has('hiddenRepos')).toBe(false);
+    expect(getConfig().hiddenRepos).toContain(path.join(home, 'code', 'alpha'));
+  });
+
+  it('sets the sort order and grouping in the workspace scope in Restricted Mode', async () => {
     state.workspaceTrusted = false;
     workspaceStore.set('sortOrder', 'alphabetical');
+    workspaceStore.set('groupByFolder', true);
     await setSortOrder('recent');
-    expect(configStore.get('sortOrder')).toBe('recent');
-    expect(workspaceStore.get('sortOrder')).toBe('alphabetical');
+    await setGroupByFolder(false);
+    expect(workspaceStore.get('sortOrder')).toBe('recent');
+    expect(workspaceStore.get('groupByFolder')).toBe(false);
+    expect(configStore.has('sortOrder')).toBe(false);
+    expect(getConfig().sortOrder).toBe('recent');
+    expect(getConfig().groupByFolder).toBe(false);
   });
 });
 
