@@ -44,10 +44,10 @@ export function getConfig(): RepoDockConfig {
     hiddenRepos: storedStrings(config.get<unknown>('hiddenRepos'))
       .filter(isUsablePath)
       .map(expandPath),
-    showNestedRepos: config.get<boolean>('showNestedRepos', true),
-    sortOrder: config.get<SortOrder>('sortOrder', 'recent'),
-    groupByFolder: config.get<boolean>('groupByFolder', false),
-    openInNewWindow: config.get<boolean>('openInNewWindow', false),
+    showNestedRepos: readBoolean(config.get<unknown>('showNestedRepos'), true),
+    sortOrder: readSortOrder(config.get<unknown>('sortOrder')),
+    groupByFolder: readBoolean(config.get<unknown>('groupByFolder'), false),
+    openInNewWindow: readBoolean(config.get<unknown>('openInNewWindow'), false),
   };
 }
 
@@ -75,6 +75,20 @@ function readExclude(value: unknown): string[] {
 function clampMaxDepth(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_MAX_DEPTH;
   return Math.min(16, Math.max(1, Math.trunc(value)));
+}
+
+/**
+ * Falls back to `recent` for anything the setting does not enumerate. The title-bar sort
+ * toggle is shown by matching the `repodock.sortOrder` context key against the two known
+ * values, so an unknown one passed through would leave the view with no toggle at all.
+ */
+function readSortOrder(value: unknown): SortOrder {
+  return value === 'alphabetical' ? 'alphabetical' : 'recent';
+}
+
+/** Falls back to the default for a non-boolean, so a stored `"false"` does not read as on. */
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
 }
 
 /**

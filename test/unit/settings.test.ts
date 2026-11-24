@@ -175,6 +175,46 @@ describe('getConfig with malformed settings', () => {
     configStore.set('maxDepth', value);
     expect(getConfig().maxDepth).toBe(expected);
   });
+
+  // the sort toggle in the view title is shown by comparing this value against the two
+  // known orders, so an unknown one would leave the view with no toggle to click
+  it.each(['sideways', 'Recent', '', 3, null, ['recent']])(
+    'reads a sortOrder of %j as recent',
+    (value) => {
+      configStore.set('sortOrder', value);
+      expect(getConfig().sortOrder).toBe('recent');
+    },
+  );
+
+  it('keeps both sort orders the setting enumerates', () => {
+    configStore.set('sortOrder', 'alphabetical');
+    expect(getConfig().sortOrder).toBe('alphabetical');
+    configStore.set('sortOrder', 'recent');
+    expect(getConfig().sortOrder).toBe('recent');
+  });
+
+  it.each(['false', 'true', 0, 1, null, {}])(
+    'reads a boolean setting of %j as its default',
+    (value) => {
+      configStore.set('showNestedRepos', value);
+      configStore.set('groupByFolder', value);
+      configStore.set('openInNewWindow', value);
+      const config = getConfig();
+      expect(config.showNestedRepos).toBe(true);
+      expect(config.groupByFolder).toBe(false);
+      expect(config.openInNewWindow).toBe(false);
+    },
+  );
+
+  it('keeps boolean settings that are booleans', () => {
+    configStore.set('showNestedRepos', false);
+    configStore.set('groupByFolder', true);
+    configStore.set('openInNewWindow', true);
+    const config = getConfig();
+    expect(config.showNestedRepos).toBe(false);
+    expect(config.groupByFolder).toBe(true);
+    expect(config.openInNewWindow).toBe(true);
+  });
 });
 
 describe('overlapping list writes', () => {
