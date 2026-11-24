@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   dedupeRepos,
@@ -51,12 +52,17 @@ describe('repoLabel', () => {
 });
 
 describe('repoLabels', () => {
-  /** A repo at `repoPath` found under the scan root `root`, both POSIX-style. */
+  /**
+   * A repo at `repoPath` found under the scan root `root`. Written POSIX-style and stored
+   * with the platform's separator, which is what the scanner produces and what the label
+   * code splits on.
+   */
   function repoAt(repoPath: string, root: string): RepoInfo {
+    const native = (posixPath: string) => posixPath.split('/').join(path.sep);
     return {
       name: repoPath.split('/').pop() ?? repoPath,
-      path: repoPath,
-      root,
+      path: native(repoPath),
+      root: native(root),
       relPath: repoPath === root ? '' : repoPath.slice(root.length + 1),
     };
   }
