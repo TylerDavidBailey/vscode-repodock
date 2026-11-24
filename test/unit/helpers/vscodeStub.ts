@@ -236,6 +236,14 @@ export function createVscodeStub(state: StubState = stubState) {
     constructor(public id: string) {}
   }
 
+  class FileDecoration {
+    constructor(
+      public badge?: string,
+      public tooltip?: string,
+      public color?: unknown,
+    ) {}
+  }
+
   // accumulates into `value` so tooltip tests can assert the rendered markdown
   class MarkdownString {
     value = '';
@@ -315,6 +323,7 @@ export function createVscodeStub(state: StubState = stubState) {
     TreeItem,
     ThemeIcon,
     ThemeColor,
+    FileDecoration,
     MarkdownString,
     Disposable: class {
       constructor(public dispose: () => void) {}

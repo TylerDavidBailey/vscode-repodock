@@ -32,7 +32,7 @@ const SCAN_REFRESH_MIN_INTERVAL_MS = 30_000;
 export class CurrentRepoDecorationProvider implements vscode.FileDecorationProvider {
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
     if (uri.scheme !== CURRENT_REPO_SCHEME) return undefined;
-    return { color: new vscode.ThemeColor('charts.blue') };
+    return new vscode.FileDecoration(undefined, undefined, new vscode.ThemeColor('charts.blue'));
   }
 }
 
