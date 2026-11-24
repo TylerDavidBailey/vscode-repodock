@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { canonicalPathKey } from '../core/paths';
+import { canonicalPathKey, isMissingDirectory } from '../core/paths';
 import type { RepoInfo } from '../core/types';
 import { promptAddFolders, showFolderManager } from './folderPicker';
 import type { PinStore } from './pins';
@@ -38,6 +38,16 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
   const { provider, recency, pins, refresh } = deps;
 
   const open = async (repo: RepoInfo, forceNewWindow?: boolean): Promise<void> => {
+    // A repo deleted or moved since the last scan stays listed until the next one. VS Code
+    // answers an open of a missing folder with a "Path does not exist" dialog and nothing
+    // else, so the row would stay, stamped as the most recently opened repo.
+    if (await isMissingDirectory(repo.path)) {
+      void vscode.window.showWarningMessage(
+        `RepoDock could not open ${repo.name}: ${tildify(repo.path)} no longer exists.`,
+      );
+      await refresh();
+      return;
+    }
     await recency.touch(repo.path);
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(repo.path), {
       forceNewWindow: forceNewWindow ?? getConfig().openInNewWindow,
