@@ -142,7 +142,7 @@ describe('the current-repo highlight', () => {
 
   it('colors only the scheme it tagged', () => {
     const decorations = new CurrentRepoDecorationProvider();
-    const uri = (scheme: string) => ({ scheme }) as vscode.Uri;
+    const uri = (scheme: string) => vscode.Uri.file(alpha.path).with({ scheme });
     expect(decorations.provideFileDecoration(uri(CURRENT_REPO_SCHEME))?.color).toBeDefined();
     expect(decorations.provideFileDecoration(uri('file'))).toBeUndefined();
   });
