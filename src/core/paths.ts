@@ -1,3 +1,5 @@
+import * as fs from 'node:fs/promises';
+
 /**
  * Key for comparing filesystem paths for equality. Linux is the only platform whose
  * filesystem is case-sensitive by default, so keys fold case everywhere else: NTFS is
@@ -11,4 +13,18 @@
  */
 export function canonicalPathKey(p: string): string {
   return process.platform === 'linux' ? p : p.toLowerCase();
+}
+
+/**
+ * Whether `p` is known to no longer be a directory: nothing is there, or a file took its
+ * place. Any other failure (permissions, a stale network handle) answers false, because
+ * "could not check" is not "gone".
+ */
+export async function isMissingDirectory(p: string): Promise<boolean> {
+  try {
+    return !(await fs.stat(p)).isDirectory();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR';
+  }
 }

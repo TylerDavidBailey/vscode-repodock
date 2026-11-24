@@ -7,8 +7,13 @@ vi.mock('../../src/core/scanner', () => ({ scanForRepos: vi.fn(() => Promise.res
 vi.mock('../../src/core/git', () => ({
   loadGitStates: vi.fn(() => Promise.resolve({ gitMissing: false })),
 }));
+// the repos here are paths that were never created, so the real check would call them all gone
+vi.mock('../../src/core/paths', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/core/paths')>()),
+  isMissingDirectory: vi.fn(),
+}));
 
-import { canonicalPathKey } from '../../src/core/paths';
+import { canonicalPathKey, isMissingDirectory } from '../../src/core/paths';
 import { registerCommands } from '../../src/ext/commands';
 import { getConfig } from '../../src/ext/settings';
 import { PinStore } from '../../src/ext/pins';
@@ -48,6 +53,7 @@ function lastExecute(command: string): unknown[] | undefined {
 
 beforeEach(() => {
   state.reset();
+  vi.mocked(isMissingDirectory).mockResolvedValue(false);
   recency = new RecencyStore(fakeMemento());
   pins = new PinStore(fakeMemento());
   provider = new RepoTreeProvider(recency, pins);
@@ -83,6 +89,34 @@ describe('opening a repository', () => {
     state.config.set('openInNewWindow', false);
     await run('repodock.openInNewWindow', element);
     expect(lastExecute('vscode.openFolder')?.[1]).toEqual({ forceNewWindow: true });
+  });
+});
+
+describe('opening a repository that is no longer on disk', () => {
+  beforeEach(() => {
+    vi.mocked(isMissingDirectory).mockResolvedValue(true);
+  });
+
+  it.each(['repodock.open', 'repodock.openInCurrentWindow', 'repodock.openInNewWindow'])(
+    '%s says so instead of handing VS Code a missing folder',
+    async (command) => {
+      await run(command, element);
+
+      expect(lastExecute('vscode.openFolder')).toBeUndefined();
+      expect(state.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('could not open alpha'),
+      );
+    },
+  );
+
+  it('does not record the repo as opened, which would sort it to the top', async () => {
+    await run('repodock.open', element);
+    expect(recency.all().size).toBe(0);
+  });
+
+  it('rescans, so the stale row leaves the tree', async () => {
+    await run('repodock.open', element);
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
 
