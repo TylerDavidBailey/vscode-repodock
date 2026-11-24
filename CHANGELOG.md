@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.5](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.4...v1.1.5) (2026-11-24)
+
+
+### Bug Fixes
+
+* **deps:** patch npm audit advisories in dev dependencies ([#70](https://github.com/TylerDavidBailey/vscode-repodock/issues/70)) ([3a2a4bb](https://github.com/TylerDavidBailey/vscode-repodock/commit/3a2a4bbc134743ff2147e443dee1c2a734640ad3))
+* do not record or keep a repository that is no longer on disk ([#66](https://github.com/TylerDavidBailey/vscode-repodock/issues/66)) ([38a8b95](https://github.com/TylerDavidBailey/vscode-repodock/commit/38a8b9549e1ec8aeceb689a2144f75585ab07103))
+* fall back to defaults for malformed sort and boolean settings ([#65](https://github.com/TylerDavidBailey/vscode-repodock/issues/65)) ([5c766c2](https://github.com/TylerDavidBailey/vscode-repodock/commit/5c766c214cd32c0ff1edca95580c233459738b2b))
+* tell same-named repositories in different folders apart ([#67](https://github.com/TylerDavidBailey/vscode-repodock/issues/67)) ([0a7fd8b](https://github.com/TylerDavidBailey/vscode-repodock/commit/0a7fd8b57b5bfe6145382189a20d5b7be162682e))
+* write view settings to the workspace scope in Restricted Mode ([#64](https://github.com/TylerDavidBailey/vscode-repodock/issues/64)) ([140a5a1](https://github.com/TylerDavidBailey/vscode-repodock/commit/140a5a1fec371e45a2efae134cf415537d04f6e1))
+
 ## [1.1.4](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.3...v1.1.4) (2026-11-01)
 
 
