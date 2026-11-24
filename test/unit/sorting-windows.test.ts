@@ -7,7 +7,7 @@ vi.mock('node:path', async () => {
   return { ...actual.win32, default: actual.win32 };
 });
 
-import { filterHiddenRepos } from '../../src/core/sorting';
+import { filterHiddenRepos, repoLabels } from '../../src/core/sorting';
 import type { RepoInfo } from '../../src/core/types';
 
 const win = (name: string, path: string, relPath: string): RepoInfo => ({
@@ -55,6 +55,34 @@ describe('filterHiddenRepos on Windows', () => {
     const repos = [win('outer2', 'C:\\code\\outer2', 'outer2')];
     expect(filterHiddenRepos(repos, ['C:\\code\\outer']).map((repo) => repo.name)).toEqual([
       'outer2',
+    ]);
+  });
+});
+
+describe('repoLabels on Windows', () => {
+  const under = (root: string): RepoInfo => ({
+    name: 'web-app',
+    path: `${root}\\web-app`,
+    root,
+    relPath: 'web-app',
+  });
+  const labelsOf = (repos: RepoInfo[]) => repos.map((repo) => repoLabels(repos).get(repo.path));
+
+  it('reads the folder out of a backslash path and joins levels with a forward slash', () => {
+    expect(labelsOf([under('C:\\code\\work'), under('C:\\code\\personal')])).toEqual([
+      'web-app (work)',
+      'web-app (personal)',
+    ]);
+    expect(labelsOf([under('C:\\acme\\src'), under('C:\\globex\\src')])).toEqual([
+      'web-app (acme/src)',
+      'web-app (globex/src)',
+    ]);
+  });
+
+  it('falls back to the drive when nothing else differs', () => {
+    expect(labelsOf([under('C:\\code'), under('D:\\code')])).toEqual([
+      'web-app (C:/code)',
+      'web-app (D:/code)',
     ]);
   });
 });
