@@ -149,7 +149,18 @@ describe('the current-repo highlight', () => {
 });
 
 describe('folder sections', () => {
-  it('renders a count, an expanded state and no contextValue', async () => {
+  /** Groups one repo under each of `folders` and returns the rendered section headers. */
+  async function sectionsFor(folders: string[]): Promise<vscode.TreeItem[]> {
+    state.config.set('directories', folders);
+    state.config.set('groupByFolder', true);
+    const { provider } = await render(
+      folders.map((folder) => makeRepo({ path: path.join(folder, 'repo'), root: folder })),
+    );
+    return provider.getChildren().map((section) => provider.getTreeItem(section));
+  }
+  const headers = (items: vscode.TreeItem[]) => items.map((item) => [item.label, item.description]);
+
+  it('renders the folder name, where it lives, a count, and no contextValue', async () => {
     const sub = absPath('/other');
     state.config.set('directories', [absPath('/srv/repos'), sub]);
     state.config.set('groupByFolder', true);
@@ -158,10 +169,40 @@ describe('folder sections', () => {
     const section = required(provider.getChildren()[0], 'a folder section');
     const item = provider.getTreeItem(section);
     expect(item.id).toBe(`folder:${absPath('/srv/repos')}`);
-    expect(item.description).toBe('1');
+    expect(item.label).toBe('repos');
+    expect(item.description).toBe(`${absPath('/srv')} · 1`);
+    // the header no longer spells the path out, so the tooltip is where the whole of it is
+    expect(item.tooltip).toBe(absPath('/srv/repos'));
     expect(item.collapsibleState).toBe(2); // Expanded
     // folder rows deliberately carry no contextValue, so the /^repo/ menus skip them
     expect(item.contextValue).toBeUndefined();
+  });
+
+  it('shortens the home directory in the location', async () => {
+    const work = path.join(os.homedir(), 'code', 'work');
+    const items = await sectionsFor([work, absPath('/srv/repos')]);
+    expect(headers(items)).toEqual([
+      ['work', `${path.join('~', 'code')} · 1`],
+      ['repos', `${absPath('/srv')} · 1`],
+    ]);
+  });
+
+  it('labels the home directory itself with a tilde and no location', async () => {
+    const items = await sectionsFor([os.homedir(), absPath('/srv/repos')]);
+    expect(headers(items)[0]).toEqual(['~', '1']);
+  });
+
+  it('labels a filesystem root with its path and no location', async () => {
+    const items = await sectionsFor([absPath('/'), absPath('/srv/repos')]);
+    expect(headers(items)[0]).toEqual([absPath('/'), '1']);
+  });
+
+  it('tells same-named folders apart in the label, not only in the location', async () => {
+    const items = await sectionsFor([absPath('/srv/acme/src'), absPath('/srv/globex/src')]);
+    expect(headers(items)).toEqual([
+      ['src (acme)', `${absPath('/srv/acme')} · 1`],
+      ['src (globex)', `${absPath('/srv/globex')} · 1`],
+    ]);
   });
 });
 

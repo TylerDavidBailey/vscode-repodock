@@ -31,7 +31,7 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 - Pins the repos you use daily to the top. Hides the ones you never open.
 - Highlights the repo that is open in the current window, and reveals it when the view opens.
 - Sorts by most recently opened, with compact `2h` timestamps, or alphabetically. Both are in the title bar.
-- Groups the list into one section per scanned folder, if you turn grouping on. A repo under two overlapping folders appears once, in the more specific one.
+- Groups the list into one section per scanned folder, if you turn grouping on. Each section is headed by the folder's name, with the folder it sits in and its repo count beside it. A repo under two overlapping folders appears once, in the more specific one.
 - Filters as you type once the tree has focus.
 - Makes no network requests, collects no telemetry, and ships no runtime dependencies. Paths and timestamps stay in VS Code's local storage.
 

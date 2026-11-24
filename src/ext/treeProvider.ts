@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { loadGitStates } from '../core/git';
 import { canonicalPathKey } from '../core/paths';
@@ -6,6 +7,7 @@ import {
   dedupeRepos,
   filterHiddenRepos,
   filterNestedRepos,
+  folderLabels,
   formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
@@ -50,6 +52,7 @@ export interface TreeElement {
 export interface FolderElement {
   /** Absolute path of the scan root this section represents. */
   root: string;
+  /** The folder's name rather than its path; `describeFolder` supplies where it lives. */
   label: string;
   repos: RepoInfo[];
 }
@@ -265,11 +268,13 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     if (!config.groupByFolder) return undefined;
     const groups = groupReposByRoot(this.visibleRepos(), config.directories);
     if (groups.length < 2) return undefined;
+    const labels = folderLabels(groups.map((group) => group.root));
     return groups.map((group) => {
       const key = canonicalPathKey(group.root);
       let element = this.folderElements.get(key);
       if (!element) {
-        element = { root: group.root, label: tildify(group.root), repos: group.repos };
+        const label = isHomeDirectory(group.root) ? '~' : labels.get(group.root);
+        element = { root: group.root, label: label ?? tildify(group.root), repos: group.repos };
         this.folderElements.set(key, element);
       }
       return element;
@@ -300,7 +305,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Expanded);
     item.id = `folder:${element.root}`;
     item.iconPath = new vscode.ThemeIcon('folder');
-    item.description = `${element.repos.length}`;
+    item.description = describeFolder(element.root, element.repos.length);
     item.tooltip = element.root;
     return item;
   }
@@ -335,6 +340,22 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     };
     return item;
   }
+}
+
+function isHomeDirectory(folder: string): boolean {
+  return tildify(folder) === '~';
+}
+
+/**
+ * The dim text after a section's folder name: the directory the folder sits in, then its
+ * repo count. The location goes here rather than in the label because VS Code truncates
+ * the description first, so a narrow sidebar loses the path and keeps the name.
+ */
+export function describeFolder(root: string, repoCount: number): string {
+  const parent = path.dirname(root);
+  // the home directory and a filesystem root already show their whole path as the label
+  const isWholePathInLabel = parent === root || isHomeDirectory(root);
+  return isWholePathInLabel ? `${repoCount}` : `${tildify(parent)} · ${repoCount}`;
 }
 
 /** The dim text after the repo name: branch and last-opened time; details live in the tooltip. */

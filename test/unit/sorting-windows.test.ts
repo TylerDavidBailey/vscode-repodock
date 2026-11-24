@@ -7,7 +7,7 @@ vi.mock('node:path', async () => {
   return { ...actual.win32, default: actual.win32 };
 });
 
-import { filterHiddenRepos, repoLabels } from '../../src/core/sorting';
+import { filterHiddenRepos, folderLabels, repoLabels } from '../../src/core/sorting';
 import type { RepoInfo } from '../../src/core/types';
 
 const win = (name: string, path: string, relPath: string): RepoInfo => ({
@@ -84,5 +84,22 @@ describe('repoLabels on Windows', () => {
       'web-app (C:/code)',
       'web-app (D:/code)',
     ]);
+  });
+});
+
+describe('folderLabels on Windows', () => {
+  const labelsOf = (roots: string[]) => roots.map((root) => folderLabels(roots).get(root));
+
+  it('reads the folder name out of a backslash path', () => {
+    expect(labelsOf(['C:\\code\\work', 'C:\\code\\personal'])).toEqual(['work', 'personal']);
+  });
+
+  it('joins the levels above same-named folders with a forward slash', () => {
+    expect(labelsOf(['C:\\acme\\src', 'C:\\globex\\src'])).toEqual(['src (acme)', 'src (globex)']);
+    expect(labelsOf(['C:\\code', 'D:\\code'])).toEqual(['code (C:)', 'code (D:)']);
+  });
+
+  it('keeps a drive root as it is', () => {
+    expect(labelsOf(['C:\\', 'D:\\'])).toEqual(['C:\\', 'D:\\']);
   });
 });

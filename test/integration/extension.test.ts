@@ -185,11 +185,17 @@ describe('RepoDock', () => {
     try {
       await until(() => rows().length === 2, 'two folder sections');
       const sections = rows();
-      // section labels are tildified; on Windows the temp dir sits under the home
-      // directory, so the fixture path really does shorten to ~\AppData\...
+      // sections are named by folder; the path beside the name is tildified, and on
+      // Windows the temp dir sits under the home directory, so it really does shorten
+      // to ~\AppData\...
       assert.deepStrictEqual(
         sections.map((section) => section.label),
-        [tildify(fixture), tildify(inner)],
+        [path.basename(fixture), 'sub'],
+      );
+      assert.deepStrictEqual(
+        sections.map((section) => api.provider.getTreeItem(section).description),
+        // alpha and its nested vendor repo stay in the outer section
+        [`${tildify(path.dirname(fixture))} · 2`, `${tildify(path.dirname(inner))} · 1`],
       );
 
       // beta is found by both roots; after dedupe it belongs to the inner section only

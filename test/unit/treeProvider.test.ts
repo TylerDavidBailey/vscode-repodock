@@ -121,8 +121,8 @@ describe('RepoTreeProvider', () => {
     await provider.refresh();
 
     const sections = provider.getChildren();
-    // sections follow the configured folder order, one per scan root
-    expect(labels(sections)).toEqual([root, sub]);
+    // sections follow the configured folder order, one per scan root, named by folder
+    expect(labels(sections)).toEqual(['repos', 'sub']);
     const [outer, inner] = sections;
     if (!outer || !inner) throw new Error('expected two folder sections');
     // beta is found by both overlapping roots; after dedupe it appears only
@@ -134,7 +134,7 @@ describe('RepoTreeProvider', () => {
     expect(innerRows[0] && provider.getParent(innerRows[0])).toBe(inner);
     const item = provider.getTreeItem(inner);
     expect(item.collapsibleState).toBe(2); // Expanded
-    expect(item.description).toBe('1');
+    expect(item.description).toBe(`${root} · 1`);
   });
 
   it('falls back to the flat list when grouping is on but only one folder is configured', async () => {

@@ -24,11 +24,25 @@ export function repoLabel(repo: RepoInfo): string {
 }
 
 /**
- * The directories above a repo, nearest last, as many as `levels` asks for. Joined with
+ * The directories above a path, nearest last, as many as `levels` asks for. Joined with
  * '/' on every platform, to match `relPath` and the labels built from it.
  */
-function parentContext(repo: RepoInfo, levels: number): string {
-  return path.dirname(repo.path).split(path.sep).filter(Boolean).slice(-levels).join('/');
+function parentContext(p: string, levels: number): string {
+  return path.dirname(p).split(path.sep).filter(Boolean).slice(-levels).join('/');
+}
+
+/**
+ * For paths that would otherwise share a label: the directories above each one, as few
+ * levels as it takes to tell them all apart. In the order given.
+ */
+function distinguishingContexts(paths: readonly string[]): string[] {
+  // distinct paths differ somewhere above their last segment, so some depth separates
+  // them; the deepest path bounds the search for a list that holds the same path twice
+  const deepest = Math.max(...paths.map((p) => p.split(path.sep).length));
+  let levels = 1;
+  const contexts = () => paths.map((p) => parentContext(p, levels));
+  while (levels < deepest && new Set(contexts()).size < paths.length) levels++;
+  return contexts();
 }
 
 /**
@@ -56,16 +70,46 @@ export function repoLabels(repos: readonly RepoInfo[]): Map<string, string> {
       for (const repo of sharing) labels.set(repo.path, label);
       continue;
     }
-    // distinct paths differ somewhere above the repo, so some depth separates them; the
-    // deepest path bounds the search for the case where the list holds the same path twice
-    const deepest = Math.max(...sharing.map((repo) => repo.path.split(path.sep).length));
-    let levels = 1;
-    const contexts = () => sharing.map((repo) => parentContext(repo, levels));
-    while (levels < deepest && new Set(contexts()).size < sharing.length) levels++;
-    for (const repo of sharing) {
-      const context = parentContext(repo, levels);
+    const contexts = distinguishingContexts(sharing.map((repo) => repo.path));
+    sharing.forEach((repo, index) => {
+      const context = contexts[index] ?? '';
       labels.set(repo.path, context === '' ? repo.name : `${repo.name} (${context})`);
+    });
+  }
+  return labels;
+}
+
+/**
+ * Labels for scan folders listed side by side, keyed by the folder path as given. Each is
+ * the folder's own name, which is the part a person recognizes and the part a narrow
+ * sidebar would otherwise cut off the end of the full path. Folders that share a name get
+ * the directories above them spelled out, the way `repoLabels` does it ("src (acme)" and
+ * "src (globex)"). A path with no name of its own, such as a filesystem root, keeps the
+ * whole path.
+ */
+export function folderLabels(roots: readonly string[]): Map<string, string> {
+  const byName = new Map<string, string[]>();
+  for (const root of roots) {
+    const name = path.basename(root) || root;
+    const sharing = byName.get(name);
+    if (sharing) {
+      sharing.push(root);
+    } else {
+      byName.set(name, [root]);
     }
+  }
+
+  const labels = new Map<string, string>();
+  for (const [name, sharing] of byName) {
+    if (sharing.length === 1) {
+      for (const root of sharing) labels.set(root, name);
+      continue;
+    }
+    const contexts = distinguishingContexts(sharing);
+    sharing.forEach((root, index) => {
+      const context = contexts[index] ?? '';
+      labels.set(root, context === '' ? name : `${name} (${context})`);
+    });
   }
   return labels;
 }

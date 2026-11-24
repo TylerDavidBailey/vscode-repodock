@@ -4,6 +4,7 @@ import {
   dedupeRepos,
   filterHiddenRepos,
   filterNestedRepos,
+  folderLabels,
   formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
@@ -120,6 +121,46 @@ describe('repoLabels', () => {
   it('terminates on a list that holds the same path twice', () => {
     const repo = repoAt('/home/user/work/web-app', '/home/user/work');
     expect(repoLabels([repo, { ...repo }]).get(repo.path)).toBe('web-app (home/user/work)');
+  });
+});
+
+describe('folderLabels', () => {
+  /** Written POSIX-style and labelled in the platform's own form, as scan roots arrive. */
+  const labelsOf = (posixRoots: string[]) => {
+    const roots = posixRoots.map((root) => root.split('/').join(path.sep));
+    return roots.map((root) => folderLabels(roots).get(root));
+  };
+
+  it('names each folder by its last segment', () => {
+    expect(labelsOf(['/home/user/code/work', '/home/user/oss'])).toEqual(['work', 'oss']);
+  });
+
+  it('spells out the directories above folders that share a name', () => {
+    expect(labelsOf(['/home/user/acme/src', '/home/user/globex/src', '/home/user/oss'])).toEqual([
+      'src (acme)',
+      'src (globex)',
+      'oss',
+    ]);
+  });
+
+  it('goes up as many levels as it takes to tell same-named folders apart', () => {
+    expect(labelsOf(['/srv/acme/platform/services', '/srv/globex/platform/services'])).toEqual([
+      'services (acme/platform)',
+      'services (globex/platform)',
+    ]);
+  });
+
+  it('tells a folder from a same-named folder nested inside it', () => {
+    expect(labelsOf(['/srv/code', '/srv/code/code'])).toEqual(['code (srv)', 'code (code)']);
+  });
+
+  it('keeps the whole path for a folder with no name of its own', () => {
+    const root = path.parse(path.resolve('/')).root;
+    expect(folderLabels([root]).get(root)).toBe(root);
+  });
+
+  it('terminates on a list that holds the same folder twice', () => {
+    expect(labelsOf(['/srv/code', '/srv/code'])).toEqual(['code (srv)', 'code (srv)']);
   });
 });
 
