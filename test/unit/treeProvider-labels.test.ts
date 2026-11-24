@@ -48,8 +48,8 @@ describe('same-named repos from different folders', () => {
     const provider = await render([workApp, personalApp, api]);
     expect(labelsOf(provider, provider.getChildren())).toEqual([
       'api',
-      'web-app (work)',
       'web-app (personal)',
+      'web-app (work)',
     ]);
   });
 

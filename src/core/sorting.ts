@@ -174,8 +174,10 @@ export function groupReposByRoot(repos: RepoInfo[], rootOrder: readonly string[]
 /**
  * Orders the flat list: pinned repos first, then the rest; each group by most recently
  * opened (falling back to name) or purely by name. Name sorting compares the repo name
- * first and relPath second, so same-named repos end up next to each other. `recency`
- * and `pinned` are keyed by canonical path key.
+ * first and relPath second, so same-named repos end up next to each other. Two scan roots
+ * can hold a repo with the same name and relPath; the full path settles those, so their
+ * order follows the folder names in their labels rather than the order roots were scanned.
+ * `recency` and `pinned` are keyed by canonical path key.
  */
 export function sortRepos(
   repos: RepoInfo[],
@@ -184,7 +186,9 @@ export function sortRepos(
   pinned: ReadonlySet<string>,
 ): RepoInfo[] {
   const byName = (a: RepoInfo, b: RepoInfo) =>
-    a.name.localeCompare(b.name) || a.relPath.localeCompare(b.relPath);
+    a.name.localeCompare(b.name) ||
+    a.relPath.localeCompare(b.relPath) ||
+    a.path.localeCompare(b.path);
   const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path)) ?? 0;
   const compare =
     order === 'recent'

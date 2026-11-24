@@ -260,6 +260,23 @@ describe('sortRepos', () => {
     ]);
   });
 
+  it('orders same-named repos from different scan roots by path, not by scan order', () => {
+    const under = (root: string): RepoInfo => ({
+      name: 'web-app',
+      path: `${root}/web-app`,
+      root,
+      relPath: 'web-app',
+    });
+    // work is configured first, so it is scanned first; personal still sorts ahead of it
+    const twins = [under('/home/user/work'), under('/home/user/personal')];
+    for (const order of ['alphabetical', 'recent'] as const) {
+      expect(sortRepos(twins, order, new Map(), none).map((repo) => repo.root)).toEqual([
+        '/home/user/personal',
+        '/home/user/work',
+      ]);
+    }
+  });
+
   it('floats pinned repos above everything, in both orders', () => {
     const pinned = new Set([`${ROOT}/gamma`]);
     const recency = new Map([[`${ROOT}/alpha`, 2000]]);
