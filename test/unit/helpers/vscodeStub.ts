@@ -1,4 +1,5 @@
 import { vi, type Mock } from 'vitest';
+import manifest from '../../../package.json';
 
 /** A quick pick item as `folderPicker.ts` builds them. */
 interface StubQuickPickItem {
@@ -44,7 +45,10 @@ export interface StubState {
   config: Map<string, unknown>;
   /** Workspace settings, same keys; a value here shadows `config` in `get`, as in VS Code. */
   workspaceConfig: Map<string, unknown>;
-  /** `workspace.isTrusted`; a Restricted Mode workspace ignores its workspace-scoped values. */
+  /**
+   * `workspace.isTrusted`; a Restricted Mode workspace ignores its workspace-scoped values
+   * for the settings `package.json` lists as restricted, and only for those.
+   */
   workspaceTrusted: boolean;
   /** Command id to handler, populated by `commands.registerCommand`. */
   commands: Map<string, (...args: never[]) => unknown>;
@@ -81,6 +85,13 @@ export interface StubState {
 }
 
 const CONFIG_SECTION = 'repodock';
+
+/** Unprefixed, like the config stores. Read from the manifest because that is what VS Code enforces. */
+const RESTRICTED_KEYS = new Set(
+  manifest.capabilities.untrustedWorkspaces.restrictedConfigurations.map((key) =>
+    key.slice(CONFIG_SECTION.length + 1),
+  ),
+);
 
 /** Listener lists the `fire*` helpers dispatch to. */
 interface Listeners {
@@ -360,8 +371,9 @@ export function createVscodeStub(state: StubState = stubState) {
       },
       getConfiguration: () => ({
         get: <T>(key: string, defaultValue: T) => {
-          // a workspace value shadows the global one only while the workspace is trusted
-          if (state.workspaceTrusted && state.workspaceConfig.has(key)) {
+          // Restricted Mode drops the workspace value of a restricted setting, nothing else
+          const isIgnored = !state.workspaceTrusted && RESTRICTED_KEYS.has(key);
+          if (!isIgnored && state.workspaceConfig.has(key)) {
             return state.workspaceConfig.get(key) as T;
           }
           return state.config.has(key) ? (state.config.get(key) as T) : defaultValue;
