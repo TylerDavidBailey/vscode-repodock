@@ -77,7 +77,8 @@ jobs:
             echo "VSCE_PAT secret not set — skipping marketplace publish."
             exit 0
           fi
-          npx vsce publish --pat "$VSCE_PAT"
+          # vsce reads VSCE_PAT itself; on the command line it would show in the process list
+          npx vsce publish
       - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
@@ -86,4 +87,5 @@ jobs:
             echo "OVSX_PAT secret not set — skipping Open VSX publish."
             exit 0
           fi
-          npx ovsx publish ./*.vsix --pat "$OVSX_PAT"
+          # ovsx reads OVSX_PAT itself, for the same reason
+          npx ovsx publish ./*.vsix

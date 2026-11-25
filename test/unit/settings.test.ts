@@ -217,6 +217,35 @@ describe('getConfig with malformed settings', () => {
   });
 });
 
+describe('Restricted Mode', () => {
+  // an untrusted folder's .vscode/settings.json must not decide where RepoDock walks the
+  // disk and runs git; contributes.test.ts checks this list against package.json
+  it.each([
+    ['directories', ['~/elsewhere'], ['~/mine']],
+    ['exclude', [], ['node_modules']],
+    ['maxDepth', 16, 2],
+  ])('ignores a workspace value for %s', (key, workspaceValue, userValue) => {
+    state.workspaceConfig.set(key, workspaceValue);
+    configStore.set(key, userValue);
+    const read = () => JSON.stringify(getConfig()[key as 'directories' | 'exclude' | 'maxDepth']);
+
+    const trusted = read();
+    state.workspaceTrusted = false;
+    const restricted = read();
+
+    expect(restricted).not.toBe(trusted);
+    state.workspaceConfig.delete(key);
+    state.workspaceTrusted = true;
+    expect(restricted).toBe(read());
+  });
+
+  it('keeps a workspace value for a setting that only changes presentation', () => {
+    state.workspaceTrusted = false;
+    state.workspaceConfig.set('recentCount', 3);
+    expect(getConfig().recentCount).toBe(3);
+  });
+});
+
 describe('overlapping list writes', () => {
   it('keeps both repos when two are hidden before either write lands', async () => {
     await Promise.all([

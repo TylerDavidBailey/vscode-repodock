@@ -10,6 +10,7 @@
 // asynchronously, and end with `ui.shot(id)` when the state is worth a picture.
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // functions handed to page.evaluate run inside the editor window
@@ -922,6 +923,71 @@ export const scenarios = [
       await ui.eventually(async () => {
         assert.deepEqual(await ui.labels(), []);
       });
+    },
+  },
+
+  {
+    id: 'hostile-repo-config',
+    kind: 'edge',
+    title: 'A repo whose own config names a program to run is listed without running it',
+    settings: { 'repodock.directories': ['~/hostile'] },
+    async run(ui, assert) {
+      // An unpacked archive can carry a .git/config like these. The program each one
+      // names only creates a marker file, so "did it run" is "does the marker exist".
+      const root = ui.fixture('hostile');
+      const marker = path.join(root, 'RAN');
+      const identity = {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Fixture',
+        GIT_AUTHOR_EMAIL: 'fixture@example.com',
+        GIT_COMMITTER_NAME: 'Fixture',
+        GIT_COMMITTER_EMAIL: 'fixture@example.com',
+      };
+      const make = (name) => {
+        const repo = path.join(root, name);
+        fs.mkdirSync(repo, { recursive: true });
+        execFileSync('git', ['init', '-q', '-b', 'main', repo]);
+        fs.writeFileSync(path.join(repo, 'tracked.txt'), 'content\n');
+        execFileSync('git', ['-C', repo, 'add', '-A'], { env: identity });
+        execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'init'], { env: identity });
+        return repo;
+      };
+      fs.rmSync(root, { recursive: true, force: true });
+      try {
+        const monitored = make('fsmonitor-trap');
+        git(monitored, 'config', 'core.fsmonitor', `touch '${marker}'; false`);
+        const filtered = make('filter-trap');
+        git(filtered, 'config', 'filter.evil.clean', `touch '${marker}'; cat`);
+        fs.writeFileSync(path.join(filtered, '.gitattributes'), '* filter=evil\n');
+        // an old timestamp makes git re-read the file, which is when a filter runs
+        fs.utimesSync(path.join(filtered, 'tracked.txt'), new Date(0), new Date(0));
+
+        // the control: an ordinary git status does run the trap
+        try {
+          git(monitored, 'status');
+        } catch {
+          // git's own verdict is beside the point
+        }
+        assert.ok(fs.existsSync(marker), 'the trap does not work, so this proves nothing');
+        fs.rmSync(marker);
+
+        await ui.command('RepoDock: Refresh');
+        await ui.eventually(async () => {
+          assert.deepEqual(
+            (await ui.rows()).map((row) => [row.label, row.description]),
+            [
+              ['filter-trap', 'main'],
+              ['fsmonitor-trap', 'main'],
+            ],
+          );
+        });
+        // one more full load, so both git calls per repo have certainly happened
+        await ui.command('RepoDock: Refresh');
+        await ui.eventually(async () => assert.equal((await ui.rows()).length, 2));
+        assert.ok(!fs.existsSync(marker), 'RepoDock ran a program named in a repo config');
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     },
   },
 

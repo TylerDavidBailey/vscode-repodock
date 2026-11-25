@@ -289,9 +289,20 @@ function createUi(page, editorId, profile) {
 
     /** Hovers a row until its tooltip shows, and returns the tooltip's text and HTML. */
     async tooltip(label, section) {
-      await (await ui.row(label, section)).hover();
       const hover = page.locator('.monaco-hover:not(.hidden) .hover-contents').last();
-      await hover.waitFor({ state: 'visible', timeout: 10_000 });
+      // A row that is redrawn while the pointer rests on it drops its pending tooltip,
+      // and rows are redrawn as each git result lands. Moving off and back on asks again.
+      for (let attempt = 1; ; attempt++) {
+        await (await ui.row(label, section)).hover();
+        try {
+          await hover.waitFor({ state: 'visible', timeout: 4_000 });
+          break;
+        } catch (error) {
+          if (attempt === 3) throw error;
+          await page.mouse.move(1000, 600);
+          await sleep(500);
+        }
+      }
       return { text: await hover.innerText(), html: await hover.innerHTML() };
     },
 

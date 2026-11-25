@@ -38,6 +38,7 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 - Hides the repos you never open.
 - Filters as you type once the tree has focus.
 - Makes no network requests, collects no telemetry, and ships no runtime dependencies. Paths and timestamps stay in VS Code's local storage.
+- Reads git status without running anything a repository's own config names (hooks, filters, a file-system monitor), so a repo you unpacked but never opened cannot run code by being listed. [SECURITY.md](SECURITY.md) has the details.
 
 Hover a row for its details, or right-click it for every action:
 
