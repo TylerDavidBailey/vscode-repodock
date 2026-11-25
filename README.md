@@ -48,14 +48,6 @@ RepoDock uses the editor's own tree, icons, and colors, so it follows whichever 
 
 <img src="docs/screenshot-light.png" alt="The RepoDock sidebar in a light theme" width="348">
 
-Hover a row for its details, or right-click it for every action:
-
-<img src="docs/screenshot-tooltip.png" alt="A tooltip showing a repo's path, branch, modified and untracked counts, upstream distance, and when it was last opened" width="435"> <img src="docs/screenshot-menu.png" alt="The context menu of a repo row: pin, open in the current or a new window, add to workspace, open in terminal, reveal, copy path, hide" width="500">
-
-RepoDock uses the editor's own tree, icons, and colors, so it follows whichever theme you use:
-
-<img src="docs/screenshot-light.png" alt="The RepoDock sidebar in a light theme" width="348">
-
 ## Getting started
 
 RepoDock requires VS Code 1.96 or newer.
