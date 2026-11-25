@@ -96,3 +96,5 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, and the commit convent
 ## License
 
 [MIT](LICENSE)
+
+The icons come from [Lucide](https://lucide.dev), used under the ISC License. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) has the notice.
