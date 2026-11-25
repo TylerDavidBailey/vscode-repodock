@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.5...v1.2.0) (2026-11-25)
+
+
+### Features
+
+* redesign the extension icon as a folder with a commit ([#72](https://github.com/TylerDavidBailey/vscode-repodock/issues/72)) ([d731830](https://github.com/TylerDavidBailey/vscode-repodock/commit/d7318300b3f6128202ad02d9145e7805b95e4226))
+* show Pinned, Recent, and All Repositories as sections of one tree ([#75](https://github.com/TylerDavidBailey/vscode-repodock/issues/75)) ([fd5b9e7](https://github.com/TylerDavidBailey/vscode-repodock/commit/fd5b9e798bcc8da01d24fd3ec1de17f8bea9cd01))
+
+
+### Bug Fixes
+
+* read git status without running programs a repository's config names ([#76](https://github.com/TylerDavidBailey/vscode-repodock/issues/76)) ([4062107](https://github.com/TylerDavidBailey/vscode-repodock/commit/40621075f403ac260f0cd6d9f4eec2406f85d79a))
+
 ## [1.1.5](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.4...v1.1.5) (2026-11-24)
 
 
