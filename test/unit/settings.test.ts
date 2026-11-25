@@ -7,8 +7,6 @@ import {
   getConfig,
   hideRepo,
   removeDirectory,
-  setGroupByFolder,
-  setSortOrder,
   tildify,
   unhideAllRepos,
 } from '../../src/ext/settings';
@@ -93,7 +91,7 @@ describe('getConfig', () => {
     expect(config.directories).toEqual([]);
     expect(config.maxDepth).toBe(4);
     expect(config.exclude).toContain('node_modules');
-    expect(config.sortOrder).toBe('recent');
+    expect(config.recentCount).toBe(10);
     expect(config.showNestedRepos).toBe(true);
     expect(config.openInNewWindow).toBe(false);
   });
@@ -176,43 +174,45 @@ describe('getConfig with malformed settings', () => {
     expect(getConfig().maxDepth).toBe(expected);
   });
 
-  // the sort toggle in the view title is shown by comparing this value against the two
-  // known orders, so an unknown one would leave the view with no toggle to click
-  it.each(['sideways', 'Recent', '', 3, null, ['recent']])(
-    'reads a sortOrder of %j as recent',
+  // VS Code shows the schema's range in the settings editor but hands over whatever
+  // settings.json holds, and a count of 0 would leave Recent permanently empty
+  it.each([
+    [0, 1],
+    [-3, 1],
+    [1, 1],
+    [7.9, 7],
+    [50, 50],
+    [51, 50],
+    [1e9, 50],
+  ])('holds a recentCount of %j to %j', (value, expected) => {
+    configStore.set('recentCount', value);
+    expect(getConfig().recentCount).toBe(expected);
+  });
+
+  it.each(['12', null, true, [5], Number.NaN, Number.POSITIVE_INFINITY])(
+    'reads a recentCount of %j as the default',
     (value) => {
-      configStore.set('sortOrder', value);
-      expect(getConfig().sortOrder).toBe('recent');
+      configStore.set('recentCount', value);
+      expect(getConfig().recentCount).toBe(10);
     },
   );
-
-  it('keeps both sort orders the setting enumerates', () => {
-    configStore.set('sortOrder', 'alphabetical');
-    expect(getConfig().sortOrder).toBe('alphabetical');
-    configStore.set('sortOrder', 'recent');
-    expect(getConfig().sortOrder).toBe('recent');
-  });
 
   it.each(['false', 'true', 0, 1, null, {}])(
     'reads a boolean setting of %j as its default',
     (value) => {
       configStore.set('showNestedRepos', value);
-      configStore.set('groupByFolder', value);
       configStore.set('openInNewWindow', value);
       const config = getConfig();
       expect(config.showNestedRepos).toBe(true);
-      expect(config.groupByFolder).toBe(false);
       expect(config.openInNewWindow).toBe(false);
     },
   );
 
   it('keeps boolean settings that are booleans', () => {
     configStore.set('showNestedRepos', false);
-    configStore.set('groupByFolder', true);
     configStore.set('openInNewWindow', true);
     const config = getConfig();
     expect(config.showNestedRepos).toBe(false);
-    expect(config.groupByFolder).toBe(true);
     expect(config.openInNewWindow).toBe(true);
   });
 });
@@ -353,25 +353,6 @@ describe('writing where the workspace supplies the value', () => {
     expect(getConfig().hiddenRepos).toEqual([]);
   });
 
-  it('sets the sort order and grouping in the scope that is in effect', async () => {
-    workspaceStore.set('sortOrder', 'alphabetical');
-    workspaceStore.set('groupByFolder', true);
-    await setSortOrder('recent');
-    await setGroupByFolder(false);
-    expect(workspaceStore.get('sortOrder')).toBe('recent');
-    expect(workspaceStore.get('groupByFolder')).toBe(false);
-    expect(configStore.has('sortOrder')).toBe(false);
-    expect(getConfig().sortOrder).toBe('recent');
-    expect(getConfig().groupByFolder).toBe(false);
-  });
-
-  it('falls back to the global scope when only it holds a value', async () => {
-    configStore.set('sortOrder', 'alphabetical');
-    await setSortOrder('recent');
-    expect(configStore.get('sortOrder')).toBe('recent');
-    expect(workspaceStore.has('sortOrder')).toBe(false);
-  });
-
   it('adds a directory globally in Restricted Mode, which ignores the workspace list', async () => {
     state.workspaceTrusted = false;
     configStore.set('directories', ['~/global']);
@@ -395,19 +376,6 @@ describe('writing where the workspace supplies the value', () => {
     expect(configStore.has('hiddenRepos')).toBe(false);
     expect(getConfig().hiddenRepos).toContain(path.join(home, 'code', 'alpha'));
   });
-
-  it('sets the sort order and grouping in the workspace scope in Restricted Mode', async () => {
-    state.workspaceTrusted = false;
-    workspaceStore.set('sortOrder', 'alphabetical');
-    workspaceStore.set('groupByFolder', true);
-    await setSortOrder('recent');
-    await setGroupByFolder(false);
-    expect(workspaceStore.get('sortOrder')).toBe('recent');
-    expect(workspaceStore.get('groupByFolder')).toBe(false);
-    expect(configStore.has('sortOrder')).toBe(false);
-    expect(getConfig().sortOrder).toBe('recent');
-    expect(getConfig().groupByFolder).toBe(false);
-  });
 });
 
 describe('unhideAllRepos', () => {
@@ -416,21 +384,5 @@ describe('unhideAllRepos', () => {
     await unhideAllRepos();
     // undefined resets to the package.json default instead of shadowing it
     expect(configStore.has('hiddenRepos')).toBe(false);
-  });
-});
-
-describe('view-state writers', () => {
-  it('sets each sort order', async () => {
-    await setSortOrder('alphabetical');
-    expect(configStore.get('sortOrder')).toBe('alphabetical');
-    await setSortOrder('recent');
-    expect(configStore.get('sortOrder')).toBe('recent');
-  });
-
-  it('sets grouping on and off', async () => {
-    await setGroupByFolder(true);
-    expect(configStore.get('groupByFolder')).toBe(true);
-    await setGroupByFolder(false);
-    expect(configStore.get('groupByFolder')).toBe(false);
   });
 });

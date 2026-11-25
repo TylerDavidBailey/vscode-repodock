@@ -32,11 +32,23 @@ export interface StubQuickPick {
 
 /** The fake `TreeView` returned by `window.createTreeView`. */
 export interface StubTreeView {
+  /** The view id it was created for. */
+  id: string;
+  /** The options object `createTreeView` was given, provider included. */
+  options: Record<string, unknown>;
+  /** Assigned by the extension: the dim text beside the view's title. */
+  description?: string;
   visible: boolean;
   reveal: Mock<(element: unknown, options?: unknown) => Promise<void>>;
   dispose: Mock<() => void>;
   onDidChangeVisibility: (listener: (e: { visible: boolean }) => void) => { dispose: () => void };
   fireVisibility: (visible: boolean) => Promise<void>;
+  onDidCollapseElement: (listener: (e: { element: unknown }) => void) => { dispose: () => void };
+  onDidExpandElement: (listener: (e: { element: unknown }) => void) => { dispose: () => void };
+  /** Plays the user folding a row. */
+  fireCollapse: (element: unknown) => Promise<void>;
+  /** Plays the user unfolding a row. */
+  fireExpand: (element: unknown) => Promise<void>;
 }
 
 /** Everything the stub records or lets a test steer; read back in assertions. */
@@ -71,8 +83,8 @@ export interface StubState {
   workspaceFolders: { uri: { fsPath: string } }[] | undefined;
   /** The last quick pick `createQuickPick()` handed out. */
   quickPick?: StubQuickPick;
-  /** The last tree view `createTreeView()` handed out. */
-  treeView?: StubTreeView;
+  /** Every tree view `createTreeView()` handed out, by view id. */
+  treeViews: Map<string, StubTreeView>;
   /** Fires `onDidChangeConfiguration` for the given keys, with or without the section prefix. */
   fireConfigChange: (...keys: string[]) => Promise<void>;
   /** Fires `onDidChangeWindowState`. */
@@ -127,6 +139,7 @@ export function createStubState(): StubState {
     updateWorkspaceFolders: vi.fn(),
     registerFileDecorationProvider: vi.fn(),
     workspaceFolders: undefined,
+    treeViews: new Map(),
     listeners,
     fireConfigChange: (...keys) => {
       const changed = new Set(keys.flatMap((key) => [key, `${CONFIG_SECTION}.${key}`]));
@@ -143,7 +156,7 @@ export function createStubState(): StubState {
       terminals.length = 0;
       state.workspaceFolders = undefined;
       state.quickPick = undefined;
-      state.treeView = undefined;
+      state.treeViews.clear();
       listeners.config.length = 0;
       listeners.windowState.length = 0;
       listeners.workspaceFolders.length = 0;
@@ -301,9 +314,21 @@ export function createVscodeStub(state: StubState = stubState) {
     return picker;
   };
 
-  const createTreeView = (): StubTreeView => {
+  const createTreeView = (id: string, options: Record<string, unknown>): StubTreeView => {
     const visibility: ((e: { visible: boolean }) => unknown)[] = [];
+    const collapse: ((e: { element: unknown }) => unknown)[] = [];
+    const expand: ((e: { element: unknown }) => unknown)[] = [];
     const view: StubTreeView = {
+      onDidCollapseElement: (listener) => register(collapse, listener),
+      onDidExpandElement: (listener) => register(expand, listener),
+      fireCollapse: async (element) => {
+        for (const listener of [...collapse]) await listener({ element });
+      },
+      fireExpand: async (element) => {
+        for (const listener of [...expand]) await listener({ element });
+      },
+      id,
+      options,
       visible: true,
       reveal: vi.fn(() => Promise.resolve()),
       dispose: vi.fn(),
@@ -314,7 +339,7 @@ export function createVscodeStub(state: StubState = stubState) {
         for (const listener of [...visibility]) await listener({ visible });
       },
     };
-    state.treeView = view;
+    state.treeViews.set(id, view);
     return view;
   };
 

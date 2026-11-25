@@ -8,15 +8,13 @@ vi.mock('../../src/core/git', () => ({
 
 import { scanForRepos } from '../../src/core/scanner';
 import { registerCommands } from '../../src/ext/commands';
-import { activate } from '../../src/ext/extension';
-import { PinStore } from '../../src/ext/pins';
-import { RecencyStore } from '../../src/ext/recency';
+import { activate, VIEW_ID } from '../../src/ext/extension';
 import { getConfig, RESTRICTED_SETTINGS } from '../../src/ext/settings';
-import { RepoTreeProvider } from '../../src/ext/treeProvider';
 import contributes from '../../package.json';
 import { fakeExtensionContext } from './helpers/extensionContext';
-import { fakeMemento } from './helpers/memento';
 import { absPath, makeRepo } from './helpers/repoFixture';
+import { required } from './helpers/required';
+import { createProvider } from './helpers/sections';
 import { stubState as state } from './helpers/vscodeStub';
 
 /**
@@ -27,8 +25,7 @@ import { stubState as state } from './helpers/vscodeStub';
 
 const { commands, menus, configuration, views, viewsWelcome } = contributes.contributes;
 
-const REPO_VIEW = views.repodock[0];
-if (!REPO_VIEW) throw new Error('package.json contributes no repodock view');
+const VIEWS = views.repodock;
 
 interface RowContextValues {
   plain: string;
@@ -55,22 +52,14 @@ async function renderedContextValues(): Promise<RowContextValues> {
   vi.mocked(scanForRepos).mockResolvedValue(repos.map((repo) => ({ ...repo })));
   state.config.set('directories', [absPath('/srv/repos')]);
 
-  const pins = new PinStore(fakeMemento());
+  const { model, pins, provider } = createProvider();
   await pins.pin(pinned.path);
   await pins.pin(nestedPinned.path);
-  const provider = new RepoTreeProvider(new RecencyStore(fakeMemento()), pins);
-  await provider.refresh();
+  await model.refresh();
 
-  const byPath = new Map(
-    provider.getChildren().map((node) => {
-      const item = provider.getTreeItem(node);
-      return ['repo' in node ? node.repo.path : node.label, item.contextValue ?? ''];
-    }),
-  );
   const valueFor = (repoPath: string) => {
-    const value = byPath.get(repoPath);
-    if (value === undefined) throw new Error(`no row rendered for ${repoPath}`);
-    return value;
+    const row = required(provider.findRepoElement(repoPath), `a row for ${repoPath}`);
+    return provider.getTreeItem(row).contextValue ?? '';
   };
   return {
     plain: valueFor(plain.path),
@@ -86,10 +75,11 @@ function viewItemPattern(when: string): RegExp | undefined {
   return match?.[1] === undefined ? undefined : new RegExp(match[1]);
 }
 
-/** Every `repodock.*` context key a `when` clause or welcome view depends on. */
+/** Every `repodock.*` context key a `when` clause of a menu or welcome view depends on. */
 function referencedContextKeys(): Set<string> {
   const clauses = [
     ...menus['view/title'].map((entry) => entry.when),
+    ...menus['view/item/context'].map((entry) => entry.when),
     ...viewsWelcome.map((entry) => entry.when),
   ];
   const keys = new Set<string>();
@@ -107,15 +97,13 @@ beforeEach(() => {
 });
 
 function registerAll(): void {
-  const provider = new RepoTreeProvider(
-    new RecencyStore(fakeMemento()),
-    new PinStore(fakeMemento()),
-  );
+  const { model, recency, pins } = createProvider();
   registerCommands(fakeExtensionContext(), {
-    provider,
-    recency: new RecencyStore(fakeMemento()),
-    pins: new PinStore(fakeMemento()),
+    model,
+    recency,
+    pins,
     refresh: () => Promise.resolve(),
+    rebuildViews: () => undefined,
   });
 }
 
@@ -149,11 +137,34 @@ describe('contributed commands', () => {
     ].map((entry) => entry.command);
     expect(referenced.filter((command) => !contributed.has(command))).toEqual([]);
   });
+
+  it('gives an icon to every command shown as a button', () => {
+    // a button without an icon falls back to its full title, which blows up a row
+    const iconOf = new Map(
+      commands.map((command) => [command.command, 'icon' in command ? command.icon : undefined]),
+    );
+    const buttons = [...menus['view/title'], ...menus['view/item/context']]
+      .filter((entry) => /^(inline|navigation)/.test(entry.group))
+      .map((entry) => entry.command);
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const command of buttons) expect(iconOf.get(command), command).toBeDefined();
+  });
 });
 
 describe('view/item/context when clauses', () => {
   const byCommand = new Map(menus['view/item/context'].map((entry) => [entry.command, entry.when]));
   const whenFor = (command: string) => byCommand.get(command) ?? '';
+
+  it('uses one when clause per command, whether it is a row button or a menu item', () => {
+    // pin, unpin and open-in-new-window each appear twice; the map above keeps one clause
+    // per command, which is only sound while both entries agree
+    for (const [command, when] of byCommand) {
+      const clauses = menus['view/item/context']
+        .filter((entry) => entry.command === command)
+        .map((entry) => entry.when);
+      expect(new Set(clauses), command).toEqual(new Set([when]));
+    }
+  });
 
   it('offers pin on unpinned rows and unpin on pinned rows, nested or not', async () => {
     const values = await renderedContextValues();
@@ -201,7 +212,7 @@ describe('view/item/context when clauses', () => {
 
   it('scopes every row and title menu entry to the RepoDock view', () => {
     for (const entry of [...menus['view/item/context'], ...menus['view/title']]) {
-      expect(entry.when, entry.command).toContain(`view == ${REPO_VIEW.id}`);
+      expect(entry.when, entry.command).toContain(`view == ${VIEW_ID}`);
     }
   });
 });
@@ -215,13 +226,24 @@ describe('configuration defaults', () => {
     expect(config.exclude).toEqual(defaults['repodock.exclude'].default);
     expect(config.hiddenRepos).toEqual(defaults['repodock.hiddenRepos'].default);
     expect(config.showNestedRepos).toBe(defaults['repodock.showNestedRepos'].default);
-    expect(config.sortOrder).toBe(defaults['repodock.sortOrder'].default);
-    expect(config.groupByFolder).toBe(defaults['repodock.groupByFolder'].default);
+    expect(config.recentCount).toBe(defaults['repodock.recentCount'].default);
     expect(config.openInNewWindow).toBe(defaults['repodock.openInNewWindow'].default);
   });
 
-  it('offers exactly the sort orders the setting enumerates', () => {
-    expect(configuration.properties['repodock.sortOrder'].enum).toEqual(['recent', 'alphabetical']);
+  it('covers every setting, so a new one cannot ship without a default being checked', () => {
+    expect(Object.keys(configuration.properties).sort()).toEqual(
+      Object.keys(getConfig())
+        .map((key) => `repodock.${key}`)
+        .sort(),
+    );
+  });
+
+  it('declares the range getConfig clamps recentCount to', () => {
+    const schema = configuration.properties['repodock.recentCount'];
+    state.config.set('recentCount', schema.minimum - 1);
+    expect(getConfig().recentCount).toBe(schema.minimum);
+    state.config.set('recentCount', schema.maximum + 1);
+    expect(getConfig().recentCount).toBe(schema.maximum);
   });
 });
 
@@ -246,10 +268,20 @@ describe('context keys', () => {
 });
 
 describe('view registration', () => {
-  it('creates the tree view package.json declares', () => {
+  it('creates exactly the tree view package.json declares', () => {
     activate(fakeExtensionContext());
-    expect(state.treeView).toBeDefined();
-    expect(REPO_VIEW.id).toBe('repodock.repos');
-    expect(viewsWelcome.every((entry) => entry.view === REPO_VIEW.id)).toBe(true);
+    expect(VIEWS.map((view) => view.id)).toEqual([VIEW_ID]);
+    expect([...state.treeViews.keys()]).toEqual([VIEW_ID]);
+  });
+
+  it('keeps the view id RepoDock has always used', () => {
+    // keybindings and a moved view from an earlier version point at this id
+    expect(VIEW_ID).toBe('repodock.repos');
+  });
+
+  it('attaches every welcome message to that view, and always shows the view itself', () => {
+    expect(viewsWelcome.every((entry) => entry.view === VIEW_ID)).toBe(true);
+    // the view holds the Add Folder button, so nothing may hide it
+    expect(VIEWS.every((view) => !('when' in view))).toBe(true);
   });
 });

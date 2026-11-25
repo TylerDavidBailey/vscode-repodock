@@ -1,17 +1,17 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  compareByName,
   dedupeRepos,
   filterHiddenRepos,
   filterNestedRepos,
   formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
-  repoLabel,
+  pinnedRepos,
+  recentRepos,
   repoLabels,
-  repoPrefix,
   sameRepoList,
-  sortRepos,
 } from '../../src/core/sorting';
 import type { RepoInfo } from '../../src/core/types';
 
@@ -27,29 +27,6 @@ function makeRepo(relPath: string, parentRepoPath?: string): RepoInfo {
     parentRepoPath,
   };
 }
-
-describe('repoPrefix', () => {
-  it('returns the parent path with a trailing slash for repos below the top level', () => {
-    expect(repoPrefix(makeRepo('clients/acme/api'))).toBe('clients/acme/');
-  });
-
-  it('is empty for top-level repos and the scan root itself', () => {
-    expect(repoPrefix(makeRepo('todo'))).toBe('');
-    expect(repoPrefix(makeRepo(''))).toBe('');
-  });
-});
-
-describe('repoLabel', () => {
-  it('qualifies the name with its parent path in parentheses', () => {
-    expect(repoLabel(makeRepo('abc/ginkgo'))).toBe('ginkgo (abc)');
-    expect(repoLabel(makeRepo('clients/acme/api'))).toBe('api (clients/acme)');
-  });
-
-  it('is just the name for top-level repos and the scan root itself', () => {
-    expect(repoLabel(makeRepo('ginkgo'))).toBe('ginkgo');
-    expect(repoLabel(makeRepo(''))).toBe('repos');
-  });
-});
 
 describe('repoLabels', () => {
   /**
@@ -68,9 +45,26 @@ describe('repoLabels', () => {
   }
   const labelsOf = (repos: RepoInfo[]) => repos.map((repo) => repoLabels(repos).get(repo.path));
 
-  it('matches repoLabel while every label is already distinct', () => {
-    const repos = [makeRepo('ginkgo'), makeRepo('abc/ginkgo'), makeRepo('todo'), makeRepo('')];
-    expect(labelsOf(repos)).toEqual(repos.map(repoLabel));
+  it('labels a repo by its bare name however deep it sits, while names are distinct', () => {
+    const repos = [
+      makeRepo('sandbox'),
+      makeRepo('clients/acme/api'),
+      makeRepo('todo'),
+      makeRepo(''),
+    ];
+    expect(labelsOf(repos)).toEqual(['sandbox', 'api', 'todo', 'repos']);
+  });
+
+  it('names the folder of same-named repos inside one scan root', () => {
+    // built with repoAt, not makeRepo: telling the folders apart splits paths on the
+    // platform's own separator, and makeRepo writes them with '/' everywhere
+    const root = '/home/user/repos';
+    const repos = [
+      repoAt(`${root}/sandbox`, root),
+      repoAt(`${root}/labs/sandbox`, root),
+      repoAt(`${root}/todo`, root),
+    ];
+    expect(labelsOf(repos)).toEqual(['sandbox (repos)', 'sandbox (labs)', 'todo']);
   });
 
   it('names the folder of same-named repos found under different scan roots', () => {
@@ -95,12 +89,11 @@ describe('repoLabels', () => {
     ]);
   });
 
-  it('extends a nested label past the scan root, keeping the part inside it', () => {
+  it('keeps climbing past folders that match, as far as the scan roots', () => {
     const repos = [
       repoAt('/home/user/work/api/vendor/sdk', '/home/user/work'),
       repoAt('/home/user/personal/api/vendor/sdk', '/home/user/personal'),
     ];
-    expect(repos.map(repoLabel)).toEqual(['sdk (api/vendor)', 'sdk (api/vendor)']);
     expect(labelsOf(repos)).toEqual(['sdk (work/api/vendor)', 'sdk (personal/api/vendor)']);
   });
 
@@ -238,60 +231,94 @@ describe('groupReposByRoot', () => {
   });
 });
 
-describe('sortRepos', () => {
+describe('compareByName', () => {
+  it('orders by repo name, not by the folders above it', () => {
+    const repos = [makeRepo('zeta'), makeRepo('sub/beta'), makeRepo('alpha')];
+    expect(repos.sort(compareByName).map((repo) => repo.name)).toEqual(['alpha', 'beta', 'zeta']);
+  });
+
+  it('settles same-named repos by path, so their order never depends on scan order', () => {
+    const twins = [makeRepo('sandbox'), makeRepo('labs/sandbox')];
+    expect(twins.sort(compareByName).map((repo) => repo.relPath)).toEqual([
+      'labs/sandbox',
+      'sandbox',
+    ]);
+    expect(
+      twins
+        .reverse()
+        .sort(compareByName)
+        .map((repo) => repo.relPath),
+    ).toEqual(['labs/sandbox', 'sandbox']);
+  });
+});
+
+describe('pinnedRepos', () => {
   const repos = [makeRepo('gamma'), makeRepo('alpha'), makeRepo('sub/beta')];
-  const none = new Set<string>();
   const names = (list: RepoInfo[]) => list.map((repo) => repo.name);
 
-  it('orders by recency, falling back to name', () => {
-    const recency = new Map([[`${ROOT}/sub/beta`, 2000]]);
-    expect(names(sortRepos(repos, 'recent', recency, none))).toEqual(['beta', 'alpha', 'gamma']);
+  it('keeps only pinned repos, in name order', () => {
+    const pinned = new Set([`${ROOT}/gamma`, `${ROOT}/sub/beta`]);
+    expect(names(pinnedRepos(repos, pinned))).toEqual(['beta', 'gamma']);
   });
 
-  it('orders purely by name when alphabetical, ignoring the folder prefix', () => {
-    const recency = new Map([[`${ROOT}/gamma`, 2000]]);
-    // sub/beta sorts as "beta", not under "s"
-    expect(names(sortRepos(repos, 'alphabetical', recency, none))).toEqual([
-      'alpha',
-      'beta',
-      'gamma',
+  it('is empty when nothing is pinned', () => {
+    expect(pinnedRepos(repos, new Set())).toEqual([]);
+  });
+
+  it('ignores a pin whose repo is no longer in the list', () => {
+    // a pinned repo that was deleted, hidden, or moved out of the scanned folders
+    expect(pinnedRepos(repos, new Set([`${ROOT}/gone`]))).toEqual([]);
+  });
+
+  it('leaves the list it was given untouched', () => {
+    const before = names(repos);
+    pinnedRepos(repos, new Set(repos.map((repo) => repo.path)));
+    expect(names(repos)).toEqual(before);
+  });
+});
+
+describe('recentRepos', () => {
+  const repos = [makeRepo('gamma'), makeRepo('alpha'), makeRepo('sub/beta'), makeRepo('never')];
+  const names = (list: RepoInfo[]) => list.map((repo) => repo.name);
+  const recency = new Map([
+    [`${ROOT}/alpha`, 1000],
+    [`${ROOT}/sub/beta`, 3000],
+    [`${ROOT}/gamma`, 2000],
+  ]);
+
+  it('orders by last opened, newest first, and leaves out repos never opened', () => {
+    expect(names(recentRepos(repos, recency, 10))).toEqual(['beta', 'gamma', 'alpha']);
+  });
+
+  it('stops at the limit, keeping the newest', () => {
+    expect(names(recentRepos(repos, recency, 2))).toEqual(['beta', 'gamma']);
+    expect(names(recentRepos(repos, recency, 1))).toEqual(['beta']);
+  });
+
+  it('is empty when nothing has been opened', () => {
+    expect(recentRepos(repos, new Map(), 10)).toEqual([]);
+  });
+
+  it('ignores a timestamp whose repo is no longer in the list', () => {
+    expect(recentRepos(repos, new Map([[`${ROOT}/gone`, 5000]]), 10)).toEqual([]);
+  });
+
+  it('breaks a tie in open time by name', () => {
+    const tied = new Map([
+      [`${ROOT}/gamma`, 1000],
+      [`${ROOT}/alpha`, 1000],
     ]);
+    expect(names(recentRepos(repos, tied, 10))).toEqual(['alpha', 'gamma']);
   });
 
-  it('keeps same-named repos adjacent, tie-broken by their relative path', () => {
-    const twins = [makeRepo('ginkgo'), makeRepo('abc/ginkgo')];
-    expect(sortRepos(twins, 'alphabetical', new Map(), none).map((repo) => repo.relPath)).toEqual([
-      'abc/ginkgo',
-      'ginkgo',
-    ]);
+  it('lists a repo opened at timestamp zero, which is a time and not a missing one', () => {
+    expect(names(recentRepos(repos, new Map([[`${ROOT}/alpha`, 0]]), 10))).toEqual(['alpha']);
   });
 
-  it('orders same-named repos from different scan roots by path, not by scan order', () => {
-    const under = (root: string): RepoInfo => ({
-      name: 'web-app',
-      path: `${root}/web-app`,
-      root,
-      relPath: 'web-app',
-    });
-    // work is configured first, so it is scanned first; personal still sorts ahead of it
-    const twins = [under('/home/user/work'), under('/home/user/personal')];
-    for (const order of ['alphabetical', 'recent'] as const) {
-      expect(sortRepos(twins, order, new Map(), none).map((repo) => repo.root)).toEqual([
-        '/home/user/personal',
-        '/home/user/work',
-      ]);
-    }
-  });
-
-  it('floats pinned repos above everything, in both orders', () => {
-    const pinned = new Set([`${ROOT}/gamma`]);
-    const recency = new Map([[`${ROOT}/alpha`, 2000]]);
-    expect(names(sortRepos(repos, 'recent', recency, pinned))).toEqual(['gamma', 'alpha', 'beta']);
-    expect(names(sortRepos(repos, 'alphabetical', recency, pinned))).toEqual([
-      'gamma',
-      'alpha',
-      'beta',
-    ]);
+  it('leaves the list it was given untouched', () => {
+    const before = names(repos);
+    recentRepos(repos, recency, 10);
+    expect(names(repos)).toEqual(before);
   });
 
   it('matches canonically-keyed pins and recency despite path casing on Windows', () => {
@@ -305,9 +332,8 @@ describe('sortRepos', () => {
         relPath: name,
       });
       const list = [win('alpha'), win('beta'), win('gamma')];
-      const pinned = new Set(['c:\\repos\\gamma']);
-      const recency = new Map([['c:\\repos\\beta', 2000]]);
-      expect(names(sortRepos(list, 'recent', recency, pinned))).toEqual(['gamma', 'beta', 'alpha']);
+      expect(names(pinnedRepos(list, new Set(['c:\\repos\\gamma'])))).toEqual(['gamma']);
+      expect(names(recentRepos(list, new Map([['c:\\repos\\beta', 2000]]), 10))).toEqual(['beta']);
     } finally {
       if (platform) Object.defineProperty(process, 'platform', platform);
     }

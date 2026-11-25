@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import { scenarios } from './scenarios.mjs';
 
 // functions handed to page.evaluate run inside the editor window, where `document` exists
-/* global document */
+/* global document, getComputedStyle */
 
 const REPO = path.resolve(import.meta.dirname, '../../../..');
 const E2E_DIR = process.env.REPODOCK_E2E_DIR ?? '/tmp/repodock-e2e';
@@ -33,11 +33,11 @@ const EDITORS = {
 };
 
 /** The repository the editor window opens on, which RepoDock marks as current. */
-const CURRENT_REPO = 'code/frontend/aurora-web';
+const CURRENT_REPO = 'projects/web/storefront';
 
 /** Every scenario starts from these, plus whatever its own `settings` adds. */
 const BASE_SETTINGS = {
-  'repodock.directories': ['~/code', '~/work'],
+  'repodock.directories': ['~/projects', '~/work'],
   'workbench.startupEditor': 'none',
   'security.workspace.trust.enabled': false,
   'update.mode': 'none',
@@ -50,6 +50,8 @@ const BASE_SETTINGS = {
   'workbench.tips.enabled': false,
   'extensions.ignoreRecommendations': true,
   'git.openRepositoryInParentFolders': 'never',
+  // the folder dialog as an in-window prompt the scenarios can drive, not an OS window
+  'files.simpleDialog.enable': true,
 };
 
 const MINUTE = 60_000;
@@ -58,14 +60,14 @@ const DAY = 24 * HOUR;
 
 /** Pins and last-opened times written into the profile before launch, as fixture paths. */
 const SEED = {
-  pins: ['code/services/billing-api', 'work/infra-terraform'],
+  pins: ['projects/services/payments-api', 'work/infrastructure'],
   openedAgo: {
-    'code/services/billing-api': 42 * MINUTE,
-    'code/services/auth-service': 5 * HOUR,
-    'work/clients/acme-portal': DAY,
-    'code/frontend/design-system': 3 * DAY,
-    'code/tools/cli': 9 * DAY,
-    'code/dotfiles': 40 * DAY,
+    'projects/services/payments-api': 42 * MINUTE,
+    'projects/services/user-service': 5 * HOUR,
+    'work/clients/client-portal': DAY,
+    'projects/web/admin-dashboard': 3 * DAY,
+    'projects/tools/deploy-cli': 9 * DAY,
+    'projects/dev-setup': 40 * DAY,
   },
 };
 
@@ -148,10 +150,20 @@ async function seedGlobalState(profile) {
   database.close();
 }
 
-/** The helpers a scenario drives the editor with. Everything reads the live DOM. */
+/** The headings of RepoDock's three sections, as scenarios name them. */
+export const SECTIONS = { pinned: 'Pinned', recent: 'Recent', all: 'All Repositories' };
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The helpers a scenario drives the editor with. Everything reads the live DOM. The view
+ * is one tree whose top-level rows are the section headings, so helpers that take a
+ * `section` look at the rows under that heading and default to All Repositories.
+ */
 function createUi(page, editorId, profile) {
   const settingsFile = path.join(profile, 'User', 'settings.json');
   const view = '.part.sidebar';
+  const rowSelector = `${view} .pane-body .monaco-list-row`;
 
   const ui = {
     page,
@@ -185,29 +197,84 @@ function createUi(page, editorId, profile) {
       }
     },
 
-    /** The rendered tree rows, top to bottom. Only rows scrolled into view exist. */
-    rows: () =>
+    /**
+     * Every rendered row of the view, top to bottom, section headings included. Only rows
+     * scrolled into view exist. `index` is the row's position in the whole tree. `badge` is
+     * the count at the right edge of the row and `color` the label's computed color: both
+     * come from a file decoration, which VS Code draws with CSS rather than text.
+     */
+    tree: () =>
       page.evaluate((selector) => {
         const text = (row, part) => row.querySelector(part)?.textContent ?? '';
-        return [...document.querySelectorAll(`${selector} .pane-body .monaco-list-row`)]
+        return [...document.querySelectorAll(selector)]
           .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index))
-          .map((row) => ({
-            label: text(row, '.label-name'),
-            description: text(row, '.label-description'),
-            level: Number(row.getAttribute('aria-level')),
-            total: Number(row.getAttribute('aria-setsize')),
-            selected: row.getAttribute('aria-selected') === 'true',
-            expanded: row.getAttribute('aria-expanded'),
-          }));
-      }, view),
+          .map((row) => {
+            const label = row.querySelector('.monaco-icon-label');
+            const badge = label ? getComputedStyle(label, '::after').content : 'none';
+            const icon = row.querySelector('.custom-view-tree-node-item-icon');
+            const name = row.querySelector('.label-name');
+            return {
+              index: Number(row.dataset.index),
+              label: text(row, '.label-name'),
+              description: text(row, '.label-description'),
+              level: Number(row.getAttribute('aria-level')),
+              total: Number(row.getAttribute('aria-setsize')),
+              selected: row.getAttribute('aria-selected') === 'true',
+              expanded: row.getAttribute('aria-expanded'),
+              badge: badge === 'none' ? '' : badge.replace(/^"|"$/g, ''),
+              icon: /codicon-(?!colored)([\w-]+)/.exec(icon?.className ?? '')?.[1] ?? '',
+              color: name ? getComputedStyle(name).color : '',
+              // false when the name itself is cut off with an ellipsis
+              isNameWhole: name ? name.scrollWidth <= name.clientWidth : true,
+              top: row.getBoundingClientRect().top,
+            };
+          });
+      }, rowSelector),
 
-    labels: async () => (await ui.rows()).map((row) => row.label),
+    /** The section headings on screen, top to bottom, each with the count beside it. */
+    sections: async () =>
+      (await ui.tree())
+        .filter((row) => row.level === 1)
+        .map((row) => ({
+          title: row.label,
+          count: row.description,
+          isExpanded: row.expanded === 'true',
+        })),
 
-    row: (label) =>
-      page
-        .locator(`${view} .pane-body .monaco-list-row`)
-        .filter({ has: page.locator('.label-name', { hasText: label }) })
-        .first(),
+    /**
+     * The rows under one section heading, top to bottom, with `level` counted from the
+     * heading: a row directly under it is level 1. Empty when the section is not shown.
+     */
+    async rows(section = SECTIONS.all) {
+      const tree = await ui.tree();
+      const start = tree.findIndex((row) => row.level === 1 && row.label === section);
+      if (start === -1) return [];
+      const rows = [];
+      for (const row of tree.slice(start + 1)) {
+        if (row.level === 1) break;
+        rows.push({ ...row, level: row.level - 1 });
+      }
+      return rows;
+    },
+
+    labels: async (section = SECTIONS.all) => (await ui.rows(section)).map((row) => row.label),
+
+    /**
+     * One row of a section, by its exact label. `nth` picks among rows sharing a label.
+     * Resolved against the tree as it is now, so look a row up again after anything that
+     * adds or removes rows above it.
+     */
+    async row(label, section = SECTIONS.all, nth = 0) {
+      const matches = (await ui.rows(section)).filter((row) => row.label === label);
+      assert.ok(matches[nth], `no "${label}" row under ${section}`);
+      return page.locator(`${rowSelector}[data-index="${matches[nth].index}"]`);
+    },
+
+    /** The row of a section heading. */
+    heading: (section) =>
+      page.locator(`${rowSelector}[aria-level="1"]`).filter({
+        has: page.locator('.label-name', { hasText: new RegExp(`^${escapeRegExp(section)}$`) }),
+      }),
 
     /** Runs a command by its Command Palette title, the way a user would. */
     async command(title) {
@@ -221,18 +288,18 @@ function createUi(page, editorId, profile) {
     },
 
     /** Hovers a row until its tooltip shows, and returns the tooltip's text and HTML. */
-    async tooltip(label) {
-      await ui.row(label).hover();
+    async tooltip(label, section) {
+      await (await ui.row(label, section)).hover();
       const hover = page.locator('.monaco-hover:not(.hidden) .hover-contents').last();
       await hover.waitFor({ state: 'visible', timeout: 10_000 });
       return { text: await hover.innerText(), html: await hover.innerHTML() };
     },
 
     /** Right-clicks a row and returns the labels of its context menu, top to bottom. */
-    async openContextMenu(label) {
+    async openContextMenu(label, section) {
       // an open menu covers the tree with a click shield, so a second right-click never lands
       if (await page.locator('.context-view .monaco-menu').isVisible()) await ui.dismiss();
-      await ui.row(label).click({ button: 'right' });
+      await (await ui.row(label, section)).click({ button: 'right' });
       const items = page.locator('.context-view .monaco-menu .action-item:not(.disabled)');
       await items.first().waitFor({ state: 'visible' });
       return (await items.locator('.action-label').allInnerTexts()).filter(Boolean);
@@ -250,15 +317,51 @@ function createUi(page, editorId, profile) {
       await sleep(300);
     },
 
-    /** Closes whatever menu, picker, or tooltip is open and parks the pointer off the tree. */
-    async dismiss() {
-      await page.keyboard.press('Escape');
-      await page.mouse.move(1000, 600);
+    /** Hovers a row and returns the tooltips of the buttons that appear on it, left to right. */
+    async rowButtons(label, section, nth) {
+      const row = await ui.row(label, section, nth);
+      await row.hover();
+      await sleep(200);
+      return row
+        .locator('.actions a.action-label')
+        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')));
+    },
+
+    /** Clicks one of the buttons a row shows on hover, matched by its tooltip. */
+    async clickRowButton(label, button, section, nth) {
+      const row = await ui.row(label, section, nth);
+      await row.hover();
+      await row.locator(`.actions a.action-label[aria-label="${button}"]`).click();
       await sleep(300);
     },
 
-    /** Tooltips of the buttons in the view's title bar, left to right. */
-    titleActions: () =>
+    /**
+     * Expands or collapses a row by its twistie, without triggering the row's click.
+     * `recursive` holds Alt, which makes VS Code expand everything below the row too.
+     */
+    async toggle(label, section, { recursive = false } = {}) {
+      await (
+        await ui.row(label, section)
+      )
+        .locator('.monaco-tl-twistie')
+        .click({ modifiers: recursive ? ['Alt'] : [] });
+      await sleep(300);
+    },
+
+    /** Expands or collapses a whole section by its heading's twistie. */
+    async toggleSection(section, { recursive = false } = {}) {
+      await ui
+        .heading(section)
+        .locator('.monaco-tl-twistie')
+        .click({ modifiers: recursive ? ['Alt'] : [] });
+      await sleep(300);
+    },
+
+    /**
+     * Tooltips of the buttons in the view's title bar, left to right. VS Code adds its own
+     * overflow button after the ones the extension contributes.
+     */
+    titleButtons: () =>
       page.evaluate(
         (selector) =>
           [
@@ -276,7 +379,24 @@ function createUi(page, editorId, profile) {
         view,
       ),
 
-    /** Text and button labels of the welcome content shown when the tree is empty. */
+    async clickTitleButton(button) {
+      await page
+        .locator(
+          `${view} .title-actions a.action-label[aria-label="${button}"], ${view} .pane-header a.action-label[aria-label="${button}"]`,
+        )
+        .first()
+        .click();
+      await sleep(300);
+    },
+
+    /** Closes whatever menu, picker, or tooltip is open and parks the pointer off the tree. */
+    async dismiss() {
+      await page.keyboard.press('Escape');
+      await page.mouse.move(1000, 600);
+      await sleep(300);
+    },
+
+    /** Text and button labels of the welcome content the view shows while it has no rows. */
     async welcome() {
       const content = page.locator(`${view} .welcome-view-content`).first();
       if (!(await content.isVisible())) return { text: '', buttons: [] };
@@ -299,16 +419,37 @@ function createUi(page, editorId, profile) {
         })),
       ),
 
+    /** One row of the open quick pick, by its exact label. */
+    quickPickRow: (label) =>
+      page.locator('.quick-input-widget .quick-input-list .monaco-list-row').filter({
+        has: page.locator('.label-name', { hasText: new RegExp(`^\\s*${escapeRegExp(label)}$`) }),
+      }),
+
     /**
-     * Saves a screenshot for the report. The default frame is the sidebar plus room for a
-     * menu or tooltip beside it; `full` captures the whole window.
+     * Saves a screenshot for the report, framed from the top of the sidebar down so the
+     * window's title bar stays out of it. The default frame is the sidebar plus room for
+     * a menu or tooltip beside it, `sidebarOnly` stops at the sidebar's right edge, and
+     * `full` captures the whole window.
      */
-    async shot(name, { full = false } = {}) {
+    async shot(name, { full = false, sidebarOnly = false } = {}) {
       const file = path.join(OUT, editorId, `${name}.png`);
-      await page.screenshot({
-        path: file,
-        clip: full ? undefined : { x: 0, y: 0, width: 660, height: 700 },
-      });
+      const sidebar = await page.evaluate((selector) => {
+        const activityBar = document.querySelector('.part.activitybar')?.getBoundingClientRect();
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box && activityBar
+          ? { top: Math.min(box.top, activityBar.top), right: box.right, bottom: box.bottom }
+          : undefined;
+      }, view);
+      const clip =
+        full || !sidebar
+          ? undefined
+          : {
+              x: 0,
+              y: sidebar.top,
+              width: sidebarOnly ? sidebar.right : 700,
+              height: sidebar.bottom - sidebar.top,
+            };
+      await page.screenshot({ path: file, clip });
       return file;
     },
   };
@@ -365,7 +506,7 @@ async function runEditor(playwright, editorId, selected) {
     await sleep(3000);
     await ui.command('RepoDock: Focus on Repositories View');
     await ui.eventually(async () => {
-      assert.ok((await ui.rows()).length > 0, 'the RepoDock tree never rendered a row');
+      assert.ok((await ui.tree()).length > 0, 'the RepoDock view never rendered a row');
     }, 60_000);
 
     for (const scenario of selected) {
@@ -374,7 +515,7 @@ async function runEditor(playwright, editorId, selected) {
       try {
         await ui.dismiss();
         ui.setSettings(scenario.settings);
-        await scenario.run(ui, assert);
+        await scenario.run(ui, assert, SECTIONS);
         result.status = 'pass';
       } catch (error) {
         result.status = 'fail';

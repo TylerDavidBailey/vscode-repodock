@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the sample repositories the scenarios run against, inside a throwaway home
 # directory under the work dir. The editors are launched with HOME pointing there, so
-# RepoDock shows ~/code and ~/work and nothing in the real home is read or written.
+# RepoDock shows ~/projects and ~/work and nothing in the real home is read or written.
 #
 # Re-running is a no-op once the fixtures exist; pass --reset to rebuild them from scratch.
 set -euo pipefail
@@ -73,22 +73,22 @@ make_repo() {
   for i in $(seq 1 "$untracked"); do echo "new" >"scratch$i.tmp"; done
 }
 
-# --- ~/code and ~/work: the everyday set ------------------------------------------------
-#         path                                       branch                              M U ahead behind upstream
-make_repo "$H/code/frontend/aurora-web"              feat/dark-mode                      3 2 2 1 1
-make_repo "$H/code/frontend/design-system"           release/v2.1.0                      0 0 0 0 1
-make_repo "$H/code/frontend/ginkgo"                  main                                0 0 0 0 1
-make_repo "$H/code/services/auth-service"            main                                0 0 0 4 1
-make_repo "$H/code/services/billing-api"             fix/webhook-retry                   5 1 1 0 1
-make_repo "$H/code/services/gateway"                 main                                1 0 0 0 1
-make_repo "$H/code/services/gateway/vendor/payments-sdk" main                            0 0 0 0 0
-make_repo "$H/code/tools/cli"                        develop                             0 3 0 0 1
-make_repo "$H/code/tools/abc/ginkgo"                 main                                0 0 0 0 0
-make_repo "$H/code/dotfiles"                         main                                0 0 3 0 1
-make_repo "$H/work/clients/acme-portal"              feature/sso-login-redirect-handling 2 0 0 0 1
-make_repo "$H/work/clients/northwind-api"            main                                0 0 0 2 1
-make_repo "$H/work/infra-terraform"                  main                                0 0 0 0 1
-git -C "$H/code/tools/abc/ginkgo" checkout -q --detach
+# --- ~/projects and ~/work: the everyday set ----------------------------------------------
+#         path                                                   branch                              M U ahead behind upstream
+make_repo "$H/projects/web/storefront"                           feat/checkout-redesign              3 2 2 1 1
+make_repo "$H/projects/web/admin-dashboard"                      release/v2.1.0                      0 0 0 0 1
+make_repo "$H/projects/web/playground"                           main                                0 0 0 0 1
+make_repo "$H/projects/services/user-service"                    main                                0 0 0 4 1
+make_repo "$H/projects/services/payments-api"                    fix/retry-webhooks                  5 1 1 0 1
+make_repo "$H/projects/services/api-gateway"                     main                                1 0 0 0 1
+make_repo "$H/projects/services/api-gateway/vendor/shared-utils" main                                0 0 0 0 0
+make_repo "$H/projects/tools/deploy-cli"                         develop                             0 3 0 0 1
+make_repo "$H/projects/tools/experiments/playground"             main                                0 0 0 0 0
+make_repo "$H/projects/dev-setup"                                main                                0 0 3 0 1
+make_repo "$H/work/clients/client-portal"                        feature/sso-login-redirect-handling 2 0 0 0 1
+make_repo "$H/work/clients/reporting-api"                        main                                0 0 0 2 1
+make_repo "$H/work/infrastructure"                               main                                0 0 0 0 1
+git -C "$H/projects/tools/experiments/playground" checkout -q --detach
 
 # --- ~/edge: one repo per awkward case ----------------------------------------------------
 make_repo "$H/edge/name with spaces"                 main 0 0 0 0 0

@@ -66,10 +66,15 @@ changes what the user sees is not tested until the catalog says what the new beh
   - scale: the 150 repositories under `~/many`
   - persistence: state that has to survive a window reload, such as pins and last-opened times
 - **New fixture:** add it to `scripts/make-fixtures.sh` and rebuild with `--reset`. Put
-  awkward repositories under `~/edge`, not `~/code` or `~/work`, because the normal-case
+  awkward repositories under `~/edge`, not `~/projects` or `~/work`, because the normal-case
   scenarios assert the exact contents of those two.
 - **A scenario that changes the window** (opens a folder, reloads) goes at the end of the
   catalog beside `open-repo`, because the others assume the window they were launched with.
+- **Changed sidebar:** refresh the README screenshots. They are crops of the VS Code
+  run's `sections`, `tooltip`, `context-menu`, and `light-theme` shots, saved as
+  `docs/screenshot.png`, `docs/screenshot-tooltip.png`, `docs/screenshot-menu.png`, and
+  `docs/screenshot-light.png`. The fixture names are invented on purpose, so the README
+  never shows a repository from a real machine.
 
 Scenario style, so the catalog stays uniform:
 
@@ -77,6 +82,9 @@ Scenario style, so the catalog stays uniform:
 - `title` is one sentence stating the expected behavior. It is what the report shows.
 - Wrap every assertion about the UI in `ui.eventually`. Scans, git loads, and settings
   reloads all land asynchronously.
+- Read rows with `ui.rows(section)`, which returns the rows under one section heading
+  with levels counted from that heading, or `ui.tree()` for every row. `ui.row()` is
+  async: it finds the row in the tree as it is at that moment.
 - Assert exact text with `assert.deepEqual` or `assert.equal` where the text is fixed, and
   a regular expression only where it legitimately varies (hashes, relative times).
 - Put per-scenario configuration in `settings`. The runner resets to the base settings
@@ -92,9 +100,9 @@ the gates. The table already names both editor versions:
 ```markdown
 Gates: lint, typecheck, coverage, and integration all pass.
 
-| Scenario      | Kind   | VS Code 1.148.0 | VSCodium 1.143.17232 |
-| ------------- | ------ | --------------- | -------------------- |
-| `flat-recent` | normal | pass            | pass                 |
+| Scenario   | Kind   | VS Code 1.148.0 | VSCodium 1.143.17232 |
+| ---------- | ------ | --------------- | -------------------- |
+| `sections` | normal | pass            | pass                 |
 ```
 
 Then add one line on what the screenshots showed for the surfaces the PR changed. If a
@@ -120,7 +128,7 @@ State these as untested when a PR touches them, or test them by hand:
   `/tmp/repodock-e2e`, is fine. To keep the files elsewhere, symlink a short path to that
   place and set `REPODOCK_E2E_DIR` to the short path.
 - **Never point the scripts at the real home directory.** The editors run with `HOME` set
-  to `<work dir>/home`, which is what makes RepoDock show `~/code`, and it keeps real
+  to `<work dir>/home`, which is what makes RepoDock show `~/projects`, and it keeps real
   settings and repositories out of the run.
 - **Network.** The scripts download from `update.code.visualstudio.com`,
   `vscode.download.prss.microsoft.com`, and `download.vscodium.com`. An environment with
