@@ -56,7 +56,14 @@ describe('repoLabels', () => {
   });
 
   it('names the folder of same-named repos inside one scan root', () => {
-    const repos = [makeRepo('sandbox'), makeRepo('labs/sandbox'), makeRepo('todo')];
+    // built with repoAt, not makeRepo: telling the folders apart splits paths on the
+    // platform's own separator, and makeRepo writes them with '/' everywhere
+    const root = '/home/user/repos';
+    const repos = [
+      repoAt(`${root}/sandbox`, root),
+      repoAt(`${root}/labs/sandbox`, root),
+      repoAt(`${root}/todo`, root),
+    ];
     expect(labelsOf(repos)).toEqual(['sandbox (repos)', 'sandbox (labs)', 'todo']);
   });
 
