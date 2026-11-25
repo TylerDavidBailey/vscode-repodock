@@ -18,7 +18,8 @@ import { registerCommands } from '../../src/ext/commands';
 import { getConfig } from '../../src/ext/settings';
 import { PinStore } from '../../src/ext/pins';
 import { RecencyStore } from '../../src/ext/recency';
-import { RepoTreeProvider, type TreeElement } from '../../src/ext/treeProvider';
+import { RepoModel } from '../../src/ext/repoModel';
+import type { TreeNode } from '../../src/ext/treeProvider';
 import { fakeExtensionContext } from './helpers/extensionContext';
 import { fakeMemento } from './helpers/memento';
 import { absPath, makeRepo } from './helpers/repoFixture';
@@ -31,9 +32,9 @@ const WORK = absPath('/srv/work');
 // through expandPath, and neither step is observable with a path outside the home dir
 const HOME_DIR = path.join(os.homedir(), 'code');
 const HOME_LABEL = '~' + path.sep + 'code';
-const element: TreeElement = { repo, label: 'alpha' };
+const element: TreeNode = { kind: 'repo', repo, label: 'alpha', children: [] };
 
-let provider: RepoTreeProvider;
+let rebuildViews: Mock<() => void>;
 let recency: RecencyStore;
 let pins: PinStore;
 let refresh: Mock<() => Promise<void>>;
@@ -56,9 +57,15 @@ beforeEach(() => {
   vi.mocked(isMissingDirectory).mockResolvedValue(false);
   recency = new RecencyStore(fakeMemento());
   pins = new PinStore(fakeMemento());
-  provider = new RepoTreeProvider(recency, pins);
   refresh = vi.fn(() => Promise.resolve());
-  registerCommands(fakeExtensionContext(), { provider, recency, pins, refresh });
+  rebuildViews = vi.fn();
+  registerCommands(fakeExtensionContext(), {
+    model: new RepoModel(),
+    recency,
+    pins,
+    refresh,
+    rebuildViews,
+  });
 });
 
 describe('opening a repository', () => {
@@ -70,6 +77,26 @@ describe('opening a repository', () => {
     const [uri, options] = lastExecute('vscode.openFolder') ?? [];
     expect((uri as { fsPath: string }).fsPath).toBe(repo.path);
     expect(options).toEqual({ forceNewWindow: false });
+  });
+
+  it('re-renders the views, so Recent moves in a window that stays open', async () => {
+    await run('repodock.openInNewWindow', element);
+    expect(rebuildViews).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing for a folder row or no row at all', async () => {
+    const folder: TreeNode = {
+      kind: 'folder',
+      path: CODE,
+      label: 'code',
+      isRoot: true,
+      children: [],
+      repoCount: 0,
+    };
+    await run('repodock.open', folder);
+    await run('repodock.open');
+    expect(lastExecute('vscode.openFolder')).toBeUndefined();
+    expect(recency.all().size).toBe(0);
   });
 
   it('honours the openInNewWindow setting, read live rather than cached', async () => {
@@ -142,11 +169,10 @@ describe('pinning', () => {
     expect(pins.isPinned(repo.path)).toBe(false);
   });
 
-  it('re-renders the tree after either command', async () => {
-    const rebuild = vi.spyOn(provider, 'rebuild');
+  it('re-renders every view after either command', async () => {
     await run('repodock.pinRepo', element);
     await run('repodock.unpinRepo', element);
-    expect(rebuild).toHaveBeenCalledTimes(2);
+    expect(rebuildViews).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -189,20 +215,6 @@ describe('removing a folder', () => {
 });
 
 describe('settings-writing commands', () => {
-  it('sets the sort order both ways', async () => {
-    await run('repodock.sortAlphabetically');
-    expect(state.config.get('sortOrder')).toBe('alphabetical');
-    await run('repodock.sortByRecent');
-    expect(state.config.get('sortOrder')).toBe('recent');
-  });
-
-  it('toggles folder grouping both ways', async () => {
-    await run('repodock.groupByFolder');
-    expect(state.config.get('groupByFolder')).toBe(true);
-    await run('repodock.showFlatList');
-    expect(state.config.get('groupByFolder')).toBe(false);
-  });
-
   it('hides a repo by appending it to hiddenRepos', async () => {
     await run('repodock.hideRepo', element);
     expect(state.config.get('hiddenRepos')).toEqual([repo.path]);

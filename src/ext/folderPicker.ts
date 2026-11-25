@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { canonicalPathKey } from '../core/paths';
 import { filterNestedRepos } from '../core/sorting';
 import { addDirectories, getConfig, removeDirectory, tildify } from './settings';
-import type { RepoTreeProvider } from './treeProvider';
+import type { RepoModel } from './repoModel';
 
 interface FolderItem extends vscode.QuickPickItem {
   /** Absent on the "Add Folder…" row. */
@@ -26,7 +26,7 @@ export async function promptAddFolders(): Promise<void> {
  * One place to manage scan folders: every configured folder with its repo count and an
  * inline remove button, plus an add row. Settings updates trigger the rescan listener.
  */
-export function showFolderManager(provider: RepoTreeProvider): void {
+export function showFolderManager(model: RepoModel): void {
   const removeButton: vscode.QuickInputButton = {
     iconPath: new vscode.ThemeIcon('trash'),
     tooltip: 'Remove Folder',
@@ -37,10 +37,10 @@ export function showFolderManager(provider: RepoTreeProvider): void {
 
   const buildItems = (): FolderItem[] => {
     const config = getConfig();
-    // count what the tree will actually render, so turning showNestedRepos off moves
+    // count what the views will actually render, so turning showNestedRepos off moves
     // these numbers too. Overlapping roots still count a shared repo under each folder:
     // the count answers "what is in this folder", not "which folder won the dedupe".
-    const repos = filterNestedRepos(provider.getRepos(), config.showNestedRepos);
+    const repos = filterNestedRepos(model.getRepos(), config.showNestedRepos);
     const items: FolderItem[] = config.directories.map((dir) => {
       const key = canonicalPathKey(dir);
       const count = new Set(

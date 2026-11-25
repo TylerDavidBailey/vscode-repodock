@@ -2,7 +2,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { canonicalPathKey } from '../core/paths';
-import type { SortOrder } from '../core/sorting';
 
 const CONFIG_SECTION = 'repodock';
 
@@ -24,8 +23,8 @@ export interface RepoDockConfig {
   /** Absolute paths of repositories hidden via the context menu. */
   hiddenRepos: string[];
   showNestedRepos: boolean;
-  sortOrder: SortOrder;
-  groupByFolder: boolean;
+  /** How many repositories the Recent section lists at most. */
+  recentCount: number;
   openInNewWindow: boolean;
 }
 
@@ -45,13 +44,13 @@ export function getConfig(): RepoDockConfig {
       .filter(isUsablePath)
       .map(expandPath),
     showNestedRepos: readBoolean(config.get<unknown>('showNestedRepos'), true),
-    sortOrder: readSortOrder(config.get<unknown>('sortOrder')),
-    groupByFolder: readBoolean(config.get<unknown>('groupByFolder'), false),
+    recentCount: clampRecentCount(config.get<unknown>('recentCount')),
     openInNewWindow: readBoolean(config.get<unknown>('openInNewWindow'), false),
   };
 }
 
 const DEFAULT_MAX_DEPTH = 4;
+const DEFAULT_RECENT_COUNT = 10;
 const DEFAULT_EXCLUDE = ['node_modules', 'bower_components', '.Trash'];
 
 /**
@@ -77,13 +76,10 @@ function clampMaxDepth(value: unknown): number {
   return Math.min(16, Math.max(1, Math.trunc(value)));
 }
 
-/**
- * Falls back to `recent` for anything the setting does not enumerate. The title-bar sort
- * toggle is shown by matching the `repodock.sortOrder` context key against the two known
- * values, so an unknown one passed through would leave the view with no toggle at all.
- */
-function readSortOrder(value: unknown): SortOrder {
-  return value === 'alphabetical' ? 'alphabetical' : 'recent';
+/** Holds `recentCount` to the 1 to 50 range the schema declares, which VS Code does not enforce. */
+function clampRecentCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_RECENT_COUNT;
+  return Math.min(50, Math.max(1, Math.trunc(value)));
 }
 
 /** Falls back to the default for a non-boolean, so a stored `"false"` does not read as on. */
@@ -255,14 +251,4 @@ export function unhideAllRepos(): Promise<void> {
       await config.update('hiddenRepos', undefined, scope);
     }
   });
-}
-
-export async function setSortOrder(order: SortOrder): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  await config.update('sortOrder', order, effectiveTarget(config, 'sortOrder'));
-}
-
-export async function setGroupByFolder(enabled: boolean): Promise<void> {
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  await config.update('groupByFolder', enabled, effectiveTarget(config, 'groupByFolder'));
 }

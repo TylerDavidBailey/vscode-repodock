@@ -4,28 +4,29 @@ import type { RepoInfo } from '../core/types';
 import { promptAddFolders, showFolderManager } from './folderPicker';
 import type { PinStore } from './pins';
 import type { RecencyStore } from './recency';
+import type { RepoModel } from './repoModel';
 import {
   expandPath,
   getConfig,
   hideRepo,
   removeDirectory,
-  setGroupByFolder,
-  setSortOrder,
   tildify,
   unhideAllRepos,
 } from './settings';
-import type { RepoTreeProvider, TreeElement } from './treeProvider';
+import type { TreeNode } from './treeProvider';
 
 interface CommandDeps {
-  provider: RepoTreeProvider;
+  model: RepoModel;
   recency: RecencyStore;
   pins: PinStore;
   /** Rescan wrapped in the scanning context so the welcome view doesn't flash mid-scan. */
   refresh: () => Promise<void>;
+  /** Re-renders every view from the repos already scanned, after a pin or an open. */
+  rebuildViews: () => void;
 }
 
-function repoOf(element: TreeElement | undefined): RepoInfo | undefined {
-  return element?.repo;
+function repoOf(element: TreeNode | undefined): RepoInfo | undefined {
+  return element?.kind === 'repo' ? element.repo : undefined;
 }
 
 /**
@@ -35,7 +36,7 @@ function repoOf(element: TreeElement | undefined): RepoInfo | undefined {
  * the job. Commands invoked from a menu receive the clicked tree element as their argument.
  */
 export function registerCommands(context: vscode.ExtensionContext, deps: CommandDeps): void {
-  const { provider, recency, pins, refresh } = deps;
+  const { model, recency, pins, refresh, rebuildViews } = deps;
 
   const open = async (repo: RepoInfo, forceNewWindow?: boolean): Promise<void> => {
     // A repo deleted or moved since the last scan stays listed until the next one. VS Code
@@ -49,12 +50,14 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
       return;
     }
     await recency.touch(repo.path);
+    // an open in a new window leaves this one showing, so its Recent section has to move
+    rebuildViews();
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(repo.path), {
       forceNewWindow: forceNewWindow ?? getConfig().openInNewWindow,
     });
   };
 
-  const withRepo = (fn: (repo: RepoInfo) => unknown) => (element?: TreeElement) => {
+  const withRepo = (fn: (repo: RepoInfo) => unknown) => (element?: TreeNode) => {
     const repo = repoOf(element);
     return repo ? fn(repo) : undefined;
   };
@@ -76,18 +79,18 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
       'repodock.pinRepo',
       withRepo(async (repo) => {
         await pins.pin(repo.path);
-        provider.rebuild();
+        rebuildViews();
       }),
     ),
     vscode.commands.registerCommand(
       'repodock.unpinRepo',
       withRepo(async (repo) => {
         await pins.unpin(repo.path);
-        provider.rebuild();
+        rebuildViews();
       }),
     ),
     vscode.commands.registerCommand('repodock.manageFolders', () => {
-      showFolderManager(provider);
+      showFolderManager(model);
     }),
     vscode.commands.registerCommand('repodock.addFolder', () => promptAddFolders()),
     vscode.commands.registerCommand('repodock.removeFolder', async () => {
@@ -101,12 +104,6 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
       }
     }),
     vscode.commands.registerCommand('repodock.refresh', () => refresh()),
-    vscode.commands.registerCommand('repodock.sortAlphabetically', () =>
-      setSortOrder('alphabetical'),
-    ),
-    vscode.commands.registerCommand('repodock.sortByRecent', () => setSortOrder('recent')),
-    vscode.commands.registerCommand('repodock.groupByFolder', () => setGroupByFolder(true)),
-    vscode.commands.registerCommand('repodock.showFlatList', () => setGroupByFolder(false)),
     vscode.commands.registerCommand(
       'repodock.openInTerminal',
       withRepo((repo) => {

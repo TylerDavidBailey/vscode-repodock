@@ -2,27 +2,6 @@ import * as path from 'node:path';
 import { canonicalPathKey } from './paths';
 import type { RepoInfo } from './types';
 
-/** Matches the allowed values of the `repodock.sortOrder` setting. */
-export type SortOrder = 'recent' | 'alphabetical';
-
-/**
- * Parent path of the repo inside its scan root, with a trailing slash
- * ("abc/" for abc/ginkgo). Empty for top-level repos and the root itself.
- */
-export function repoPrefix(repo: RepoInfo): string {
-  const lastSlash = repo.relPath.lastIndexOf('/');
-  return lastSlash === -1 ? '' : repo.relPath.slice(0, lastSlash + 1);
-}
-
-/**
- * Display label: the repo name, plus its parent path in parentheses when it has
- * one ("ginkgo (abc)") to tell same-named repos apart.
- */
-export function repoLabel(repo: RepoInfo): string {
-  const prefix = repoPrefix(repo);
-  return prefix === '' ? repo.name : `${repo.name} (${prefix.slice(0, -1)})`;
-}
-
 /**
  * The directories above a repo, nearest last, as many as `levels` asks for. Joined with
  * '/' on every platform, to match `relPath` and the labels built from it.
@@ -32,28 +11,26 @@ function parentContext(repo: RepoInfo, levels: number): string {
 }
 
 /**
- * Labels for repos listed side by side, keyed by repo path. Each starts as `repoLabel`,
- * which only looks inside the repo's own scan root: two roots holding a same-named repo
- * both yield "web-app", and nothing but the tooltip tells the rows apart. Repos that
- * collide get the directories above them spelled out instead, as many levels as it takes
- * to differ ("web-app (work)" and "web-app (personal)").
+ * Labels for repos listed side by side in a flat section, keyed by repo path. A repo is
+ * labelled by its bare name. Only repos that share a name get the directories above them
+ * spelled out, as many levels as it takes to differ ("web-app (work)" and
+ * "web-app (personal)"), because a folder on every row costs the width the branch needs.
  */
 export function repoLabels(repos: readonly RepoInfo[]): Map<string, string> {
-  const byLabel = new Map<string, RepoInfo[]>();
+  const byName = new Map<string, RepoInfo[]>();
   for (const repo of repos) {
-    const label = repoLabel(repo);
-    const sharing = byLabel.get(label);
+    const sharing = byName.get(repo.name);
     if (sharing) {
       sharing.push(repo);
     } else {
-      byLabel.set(label, [repo]);
+      byName.set(repo.name, [repo]);
     }
   }
 
   const labels = new Map<string, string>();
-  for (const [label, sharing] of byLabel) {
+  for (const [name, sharing] of byName) {
     if (sharing.length === 1) {
-      for (const repo of sharing) labels.set(repo.path, label);
+      for (const repo of sharing) labels.set(repo.path, name);
       continue;
     }
     // distinct paths differ somewhere above the repo, so some depth separates them; the
@@ -64,10 +41,37 @@ export function repoLabels(repos: readonly RepoInfo[]): Map<string, string> {
     while (levels < deepest && new Set(contexts()).size < sharing.length) levels++;
     for (const repo of sharing) {
       const context = parentContext(repo, levels);
-      labels.set(repo.path, context === '' ? repo.name : `${repo.name} (${context})`);
+      labels.set(repo.path, context === '' ? name : `${name} (${context})`);
     }
   }
   return labels;
+}
+
+/** Name order, with the full path settling same-named repos so their order is stable. */
+export function compareByName(a: RepoInfo, b: RepoInfo): number {
+  return a.name.localeCompare(b.name) || a.path.localeCompare(b.path);
+}
+
+/** The pinned repos among `repos`, in name order. `pinned` holds canonical path keys. */
+export function pinnedRepos(repos: readonly RepoInfo[], pinned: ReadonlySet<string>): RepoInfo[] {
+  return repos.filter((repo) => pinned.has(canonicalPathKey(repo.path))).sort(compareByName);
+}
+
+/**
+ * The most recently opened repos among `repos`, newest first and at most `limit` of them.
+ * A repo that was never opened is left out however short the list is, so the section
+ * reports history rather than padding itself. `recency` is keyed by canonical path key.
+ */
+export function recentRepos(
+  repos: readonly RepoInfo[],
+  recency: ReadonlyMap<string, number>,
+  limit: number,
+): RepoInfo[] {
+  const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path));
+  return repos
+    .filter((repo) => openedAt(repo) !== undefined)
+    .sort((a, b) => (openedAt(b) ?? 0) - (openedAt(a) ?? 0) || compareByName(a, b))
+    .slice(0, limit);
 }
 
 /**
@@ -140,7 +144,7 @@ export function sameRepoList(a: readonly RepoInfo[], b: readonly RepoInfo[]): bo
   );
 }
 
-/** The repos found under one scan root, rendered as a collapsible section when grouping is on. */
+/** The repos found under one scan root. */
 export interface RepoGroup {
   /** Absolute path of the scan root, as carried by the repos in the group. */
   root: string;
@@ -169,36 +173,6 @@ export function groupReposByRoot(repos: RepoInfo[], rootOrder: readonly string[]
     return index === -1 ? order.length : index;
   };
   return [...byRoot.values()].sort((a, b) => rank(a) - rank(b) || a.root.localeCompare(b.root));
-}
-
-/**
- * Orders the flat list: pinned repos first, then the rest; each group by most recently
- * opened (falling back to name) or purely by name. Name sorting compares the repo name
- * first and relPath second, so same-named repos end up next to each other. Two scan roots
- * can hold a repo with the same name and relPath; the full path settles those, so their
- * order follows the folder names in their labels rather than the order roots were scanned.
- * `recency` and `pinned` are keyed by canonical path key.
- */
-export function sortRepos(
-  repos: RepoInfo[],
-  order: SortOrder,
-  recency: ReadonlyMap<string, number>,
-  pinned: ReadonlySet<string>,
-): RepoInfo[] {
-  const byName = (a: RepoInfo, b: RepoInfo) =>
-    a.name.localeCompare(b.name) ||
-    a.relPath.localeCompare(b.relPath) ||
-    a.path.localeCompare(b.path);
-  const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path)) ?? 0;
-  const compare =
-    order === 'recent'
-      ? (a: RepoInfo, b: RepoInfo) => openedAt(b) - openedAt(a) || byName(a, b)
-      : byName;
-  const sorted = repos.slice().sort(compare);
-  return [
-    ...sorted.filter((repo) => pinned.has(canonicalPathKey(repo.path))),
-    ...sorted.filter((repo) => !pinned.has(canonicalPathKey(repo.path))),
-  ];
 }
 
 /**

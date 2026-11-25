@@ -85,7 +85,7 @@
         "command": "repodock.addFolder",
         "title": "Add Folder",
         "category": "RepoDock",
-        "icon": "$(add)"
+        "icon": "$(new-folder)"
       },
       {
         "command": "repodock.removeFolder",
@@ -97,30 +97,6 @@
         "title": "Refresh",
         "category": "RepoDock",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "repodock.sortAlphabetically",
-        "title": "Sort Alphabetically",
-        "category": "RepoDock",
-        "icon": "$(symbol-text)"
-      },
-      {
-        "command": "repodock.sortByRecent",
-        "title": "Sort by Recently Opened",
-        "category": "RepoDock",
-        "icon": "$(history)"
-      },
-      {
-        "command": "repodock.groupByFolder",
-        "title": "Group by Folder",
-        "category": "RepoDock",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "repodock.showFlatList",
-        "title": "Show Flat List",
-        "category": "RepoDock",
-        "icon": "$(list-flat)"
       },
       {
         "command": "repodock.open",
@@ -141,12 +117,14 @@
       {
         "command": "repodock.pinRepo",
         "title": "Pin Repository",
-        "category": "RepoDock"
+        "category": "RepoDock",
+        "icon": "$(pin)"
       },
       {
         "command": "repodock.unpinRepo",
         "title": "Unpin Repository",
-        "category": "RepoDock"
+        "category": "RepoDock",
+        "icon": "$(pinned)"
       },
       {
         "command": "repodock.openInTerminal",
@@ -233,41 +211,41 @@
       ],
       "view/title": [
         {
-          "command": "repodock.groupByFolder",
-          "when": "view == repodock.repos && repodock.multipleFolders && !repodock.groupByFolder",
-          "group": "navigation@2"
-        },
-        {
-          "command": "repodock.showFlatList",
-          "when": "view == repodock.repos && repodock.multipleFolders && repodock.groupByFolder",
-          "group": "navigation@2"
-        },
-        {
-          "command": "repodock.sortAlphabetically",
-          "when": "view == repodock.repos && repodock.sortOrder == recent",
-          "group": "navigation@3"
-        },
-        {
-          "command": "repodock.sortByRecent",
-          "when": "view == repodock.repos && repodock.sortOrder == alphabetical",
-          "group": "navigation@3"
+          "command": "repodock.addFolder",
+          "when": "view == repodock.repos",
+          "group": "navigation@1"
         },
         {
           "command": "repodock.refresh",
           "when": "view == repodock.repos",
-          "group": "navigation@4"
+          "group": "navigation@2"
         },
         {
           "command": "repodock.manageFolders",
           "when": "view == repodock.repos",
-          "group": "navigation@5"
+          "group": "1_folders@1"
+        },
+        {
+          "command": "repodock.unhideAll",
+          "when": "view == repodock.repos",
+          "group": "2_hidden@1"
         }
       ],
       "view/item/context": [
         {
+          "command": "repodock.pinRepo",
+          "when": "view == repodock.repos && viewItem =~ /^repo(Nested)?$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "repodock.unpinRepo",
+          "when": "view == repodock.repos && viewItem =~ /-pinned$/",
+          "group": "inline@1"
+        },
+        {
           "command": "repodock.openInNewWindow",
           "when": "view == repodock.repos && viewItem =~ /^repo/",
-          "group": "inline@1"
+          "group": "inline@2"
         },
         {
           "command": "repodock.pinRepo",
@@ -357,35 +335,24 @@
             "type": "string"
           },
           "default": [],
-          "description": "Repositories hidden from the view (absolute paths, ~ supported). Add entries with the Hide Repository context menu; clear with the Unhide All Repositories command."
+          "description": "Repositories hidden from every section (absolute paths, ~ supported). Add entries with the Hide Repository context menu; clear with the Unhide All Repositories command."
         },
         "repodock.showNestedRepos": {
           "type": "boolean",
           "default": true,
-          "description": "Show repositories found inside another repository (submodules, vendored checkouts)."
+          "description": "Show repositories found inside another repository (submodules, vendored checkouts). Under All Repositories they appear beneath the repository that contains them."
         },
-        "repodock.sortOrder": {
-          "type": "string",
-          "enum": [
-            "recent",
-            "alphabetical"
-          ],
-          "enumDescriptions": [
-            "Most recently opened first.",
-            "By repository name."
-          ],
-          "default": "recent",
-          "description": "How the Repositories view sorts repositories. Pinned repos always come first."
-        },
-        "repodock.groupByFolder": {
-          "type": "boolean",
-          "default": false,
-          "description": "Group the Repositories view into one section per configured folder. With a single folder configured the list stays flat."
+        "repodock.recentCount": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "How many repositories the Recent section lists."
         },
         "repodock.openInNewWindow": {
           "type": "boolean",
           "default": false,
-          "description": "Open repositories in a new window when clicked in the tree."
+          "description": "Open repositories in a new window when clicked."
         }
       }
     }

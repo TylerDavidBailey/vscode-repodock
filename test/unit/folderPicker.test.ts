@@ -9,10 +9,7 @@ vi.mock('../../src/core/git', () => ({
 import { scanForRepos } from '../../src/core/scanner';
 import type { RepoInfo } from '../../src/core/types';
 import { promptAddFolders, showFolderManager } from '../../src/ext/folderPicker';
-import { PinStore } from '../../src/ext/pins';
-import { RecencyStore } from '../../src/ext/recency';
-import { RepoTreeProvider } from '../../src/ext/treeProvider';
-import { fakeMemento } from './helpers/memento';
+import { RepoModel } from '../../src/ext/repoModel';
 import { required } from './helpers/required';
 import { absPath, makeRepo } from './helpers/repoFixture';
 import { stubState as state, type StubQuickPick } from './helpers/vscodeStub';
@@ -20,17 +17,14 @@ import { stubState as state, type StubQuickPick } from './helpers/vscodeStub';
 const CODE = absPath('/srv/code');
 const WORK = absPath('/srv/work');
 
-/** Builds a provider whose scan found `repos`, so the manager has counts to render. */
-async function providerWith(repos: RepoInfo[]): Promise<RepoTreeProvider> {
+/** Builds a model whose scan found `repos`, so the manager has counts to render. */
+async function modelWith(repos: RepoInfo[]): Promise<RepoModel> {
   vi.mocked(scanForRepos).mockImplementation((root) =>
     Promise.resolve(repos.filter((repo) => repo.root === root).map((repo) => ({ ...repo }))),
   );
-  const provider = new RepoTreeProvider(
-    new RecencyStore(fakeMemento()),
-    new PinStore(fakeMemento()),
-  );
-  await provider.refresh();
-  return provider;
+  const model = new RepoModel();
+  await model.refresh();
+  return model;
 }
 
 /** The quick pick the manager just opened. */
@@ -77,7 +71,7 @@ describe('promptAddFolders', () => {
 describe('showFolderManager', () => {
   it('lists each configured folder with a remove button and an add row', async () => {
     state.config.set('directories', [CODE, WORK]);
-    showFolderManager(await providerWith([]));
+    showFolderManager(await modelWith([]));
 
     const picker = openPicker();
     expect(picker.placeholder).toBe('Folders RepoDock scans for repositories');
@@ -92,7 +86,7 @@ describe('showFolderManager', () => {
 
   it('counts the repos found under each folder, singular and plural', async () => {
     state.config.set('directories', [CODE, WORK]);
-    const provider = await providerWith([
+    const provider = await modelWith([
       makeRepo({ path: '/srv/code/a', root: '/srv/code' }),
       makeRepo({ path: '/srv/code/b', root: '/srv/code' }),
       makeRepo({ path: '/srv/work/c', root: '/srv/work' }),
@@ -109,7 +103,7 @@ describe('showFolderManager', () => {
 
   it('counts a repo once when one scan root finds it twice', async () => {
     state.config.set('directories', [CODE]);
-    const provider = await providerWith([
+    const provider = await modelWith([
       makeRepo({ path: '/srv/code/a', root: '/srv/code' }),
       // the same repo, listed a second time under the same root
       makeRepo({ path: '/srv/code/a', root: '/srv/code', relPath: 'a' }),
@@ -130,11 +124,11 @@ describe('showFolderManager', () => {
       makeRepo({ path: '/srv/code/mono/pkg', root: '/srv/code', parentRepoPath: mono.path }),
     ];
 
-    showFolderManager(await providerWith(repos));
+    showFolderManager(await modelWith(repos));
     expect(openPicker().items[0]?.description).toBe('2 repos');
 
     state.config.set('showNestedRepos', false);
-    showFolderManager(await providerWith(repos));
+    showFolderManager(await modelWith(repos));
     expect(openPicker().items[0]?.description).toBe('1 repo');
   });
 
@@ -143,7 +137,7 @@ describe('showFolderManager', () => {
     // is per configured folder, so it is right for both rows to include it.
     const inner = absPath('/srv/code/inner');
     state.config.set('directories', [CODE, inner]);
-    const provider = await providerWith([
+    const provider = await modelWith([
       makeRepo({ path: '/srv/code/inner/a', root: '/srv/code' }),
       makeRepo({ path: '/srv/code/inner/a', root: '/srv/code/inner' }),
     ]);
@@ -159,7 +153,7 @@ describe('showFolderManager', () => {
 
   it('removes a folder from the trash button and rebuilds the list', async () => {
     state.config.set('directories', [CODE, WORK]);
-    showFolderManager(await providerWith([]));
+    showFolderManager(await modelWith([]));
     const picker = openPicker();
 
     await picker.fireTriggerItemButton({ item: picker.items[0] });
@@ -170,7 +164,7 @@ describe('showFolderManager', () => {
 
   it('ignores a button press on the add row', async () => {
     state.config.set('directories', [CODE]);
-    showFolderManager(await providerWith([]));
+    showFolderManager(await modelWith([]));
     const picker = openPicker();
 
     await picker.fireTriggerItemButton({ item: picker.items[1] });
@@ -181,7 +175,7 @@ describe('showFolderManager', () => {
   it('opens the folder dialog when the add row is accepted', async () => {
     state.config.set('directories', [CODE]);
     state.showOpenDialog.mockResolvedValue([{ fsPath: absPath('/srv/new') }]);
-    showFolderManager(await providerWith([]));
+    showFolderManager(await modelWith([]));
     const picker = openPicker();
     picker.selectedItems = [required(picker.items[1], 'the add row')];
 
@@ -198,7 +192,7 @@ describe('showFolderManager', () => {
 
   it('just closes when a folder row is accepted', async () => {
     state.config.set('directories', [CODE]);
-    showFolderManager(await providerWith([]));
+    showFolderManager(await modelWith([]));
     const picker = openPicker();
     picker.selectedItems = [required(picker.items[0], 'a folder row')];
 
@@ -210,7 +204,7 @@ describe('showFolderManager', () => {
   });
 
   it('disposes the picker once it hides', async () => {
-    showFolderManager(await providerWith([]));
+    showFolderManager(await modelWith([]));
     const picker = openPicker();
 
     await picker.fireHide();

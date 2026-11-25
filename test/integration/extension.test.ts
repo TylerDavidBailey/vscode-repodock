@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { RepoDockApi } from '../../src/ext/extension';
 import { tildify } from '../../src/ext/settings';
+import type { Section, TreeNode } from '../../src/ext/treeProvider';
 
 const EXTENSION_ID = 'tylerdavidbailey.repodock';
 
@@ -13,7 +14,10 @@ let fixture: string;
 let api: RepoDockApi;
 /** package.json as VS Code parsed it, so the command list cannot drift from the manifest. */
 let manifest: {
-  contributes: { commands: { command: string }[] };
+  contributes: {
+    commands: { command: string }[];
+    views: { repodock: { id: string }[] };
+  };
 };
 
 async function makeGitRepo(dir: string): Promise<void> {
@@ -51,8 +55,39 @@ async function until(predicate: () => boolean, what: string): Promise<void> {
   assert.fail(`timed out waiting for ${what}`);
 }
 
-const rows = () => api.provider.getChildren();
-const labels = () => rows().map((row) => row.label);
+/** The text of a rendered row. */
+function labelOf(node: TreeNode): string {
+  const { label } = api.provider.getTreeItem(node);
+  return typeof label === 'string' ? label : (label?.label ?? '');
+}
+
+/** Rows as indented labels, the way the view draws them; the whole tree by default. */
+function outline(nodes = api.provider.getChildren(), depth = 0): string[] {
+  return nodes.flatMap((node) => [
+    '  '.repeat(depth) + labelOf(node),
+    ...outline(api.provider.getChildren(node), depth + 1),
+  ]);
+}
+
+/** The rows under one section heading, as an outline. Empty when the section is not shown. */
+function section(name: Section): string[] {
+  const heading = api.provider
+    .getChildren()
+    .find((node) => node.kind === 'section' && node.section === name);
+  return heading ? outline(api.provider.getChildren(heading)) : [];
+}
+
+/** The row for a fixture repo in a section, by its path below the fixture folder. */
+function rowFor(name: Section, ...segments: string[]): TreeNode {
+  // a fresh render first, as VS Code would ask for after a command or a rescan
+  api.provider.getChildren();
+  const element = api.provider.findRepoElement(path.join(fixture, ...segments), name);
+  assert.ok(element, `expected a ${name} row for ${segments.join('/')}`);
+  return element;
+}
+
+const itemFor = (name: Section, ...segments: string[]) =>
+  api.provider.getTreeItem(rowFor(name, ...segments));
 
 describe('RepoDock', () => {
   before(async function () {
@@ -72,19 +107,13 @@ describe('RepoDock', () => {
     await api.refresh();
     // the directories update also kicks off a config-listener rescan that can supersede
     // the refresh above (its git results are then discarded), so wait for state to land
-    await until(() => api.provider.getGitStates().size >= 3, 'git state for every fixture repo');
+    await until(() => api.model.getGitStates().size >= 3, 'git state for every fixture repo');
   });
 
   after(async () => {
     // these are global settings in a shared user-data dir; leaving them set leaks the
     // temp fixture into the next run
-    for (const key of [
-      'directories',
-      'sortOrder',
-      'groupByFolder',
-      'hiddenRepos',
-      'showNestedRepos',
-    ]) {
+    for (const key of ['directories', 'hiddenRepos', 'showNestedRepos', 'recentCount']) {
       await settings().update(key, undefined, vscode.ConfigurationTarget.Global);
     }
     await fs.rm(fixture, { recursive: true, force: true });
@@ -99,6 +128,15 @@ describe('RepoDock', () => {
     }
   });
 
+  it('gets its view from VS Code', async () => {
+    // VS Code registers a `<view id>.focus` command per contributed view; one that is
+    // missing means the manifest entry was rejected
+    const registered = await vscode.commands.getCommands(true);
+    const views = manifest.contributes.views.repodock.map((view) => view.id);
+    assert.deepStrictEqual(views, ['repodock.repos']);
+    assert.ok(registered.includes('repodock.repos.focus'));
+  });
+
   it('discovers the fixture repositories', () => {
     const rels = api
       .getRepos()
@@ -107,15 +145,20 @@ describe('RepoDock', () => {
     assert.deepStrictEqual(rels, ['alpha', 'alpha/vendor', 'group/sub/beta']);
   });
 
-  it('renders one flat row per repo, qualified by its folder in parentheses', () => {
-    assert.deepStrictEqual(labels(), ['alpha', 'beta (group/sub)', 'vendor (alpha)']);
-    assert.strictEqual(api.provider.getChildren(rows()[0]).length, 0);
+  it('shows one section while nothing is pinned or recent, laid out the way the repos sit on disk', () => {
+    // the test window opens no folder, so no repo was recorded as opened. One scan folder,
+    // so no row for it; the group/sub chain is one row; vendor hangs under its parent repo.
+    assert.deepStrictEqual(outline(), [
+      'All Repositories',
+      '  group/sub',
+      '    beta',
+      '  alpha',
+      '    vendor',
+    ]);
   });
 
   it('shows the branch in the repo description once git state loads', () => {
-    const alpha = rows()[0];
-    assert.ok(alpha, 'expected a repo element');
-    const item = api.provider.getTreeItem(alpha);
+    const item = itemFor('all', 'alpha');
     assert.ok(
       typeof item.description === 'string' && item.description.startsWith('main'),
       `expected description to start with "main", got: ${String(item.description)}`,
@@ -123,86 +166,90 @@ describe('RepoDock', () => {
     assert.strictEqual(item.command?.command, 'repodock.open');
   });
 
-  it('tags rows with the contextValue the row menus match on', () => {
-    const contextValues = rows().map((row) => api.provider.getTreeItem(row).contextValue);
-    // vendor sits inside alpha, so it is the nested one
-    assert.deepStrictEqual(contextValues, ['repo', 'repo', 'repoNested']);
+  it('badges a repo that has uncommitted files, through the real decoration API', async () => {
+    const alphaPath = path.join(fixture, 'alpha');
+    await fs.writeFile(path.join(alphaPath, 'scratch.txt'), 'new\n');
+    try {
+      await api.refresh();
+      await until(
+        () => itemFor('all', 'alpha').resourceUri !== undefined,
+        'alpha to be tagged for decoration',
+      );
+      const uri = itemFor('all', 'alpha').resourceUri;
+      assert.strictEqual(uri?.scheme, 'repodock-repo');
+      // a real Uri round-trips the query the decoration provider reads the count from;
+      // vendor/ is untracked too, since alpha does not ignore the repo nested in it
+      assert.match(uri.query, /changes=2/);
+    } finally {
+      await fs.rm(path.join(alphaPath, 'scratch.txt'));
+      await api.refresh();
+    }
   });
 
-  it('sorts alphabetically when configured', async () => {
-    await setSetting('sortOrder', 'alphabetical');
-    try {
-      assert.deepStrictEqual(labels(), ['alpha', 'beta (group/sub)', 'vendor (alpha)']);
-    } finally {
-      await setSetting('sortOrder', undefined);
-    }
+  it('tags rows with the contextValue the row menus match on', () => {
+    assert.strictEqual(itemFor('all', 'alpha').contextValue, 'repo');
+    assert.strictEqual(itemFor('all', 'group', 'sub', 'beta').contextValue, 'repo');
+    // vendor sits inside alpha, so it is the nested one
+    assert.strictEqual(itemFor('all', 'alpha', 'vendor').contextValue, 'repoNested');
   });
 
   it('highlights the repo open in the current window', () => {
     const alphaPath = path.join(fixture, 'alpha');
-    api.provider.setCurrentRepos([alphaPath]);
+    api.model.setCurrentRepos([alphaPath]);
     try {
-      const element = api.provider.findRepoElement(alphaPath);
-      assert.ok(element, 'expected to find an element for alpha');
-      const item = api.provider.getTreeItem(element);
+      const item = itemFor('all', 'alpha');
       assert.strictEqual(item.label, 'alpha');
       const icon = item.iconPath as vscode.ThemeIcon;
       assert.strictEqual(icon.id, 'source-control');
       assert.ok(icon.color, 'expected the current repo icon to be tinted');
-      assert.strictEqual(item.resourceUri?.scheme, 'repodock-current');
-      assert.ok(!String(item.description).includes('current'));
+      assert.strictEqual(item.resourceUri?.scheme, 'repodock-repo');
+      assert.match(item.resourceUri.query, /current=1/);
       assert.match((item.tooltip as vscode.MarkdownString).value, /open in this window/);
     } finally {
-      api.provider.setCurrentRepos([]);
+      api.model.setCurrentRepos([]);
     }
   });
 
-  it('finds elements for reveal at the top level', () => {
-    const betaPath = path.join(fixture, 'group', 'sub', 'beta');
-    const element = api.provider.findRepoElement(betaPath);
-    assert.ok(element, 'expected to find an element for beta');
-    assert.strictEqual(element.label, 'beta (group/sub)');
-    assert.strictEqual(api.provider.getParent(element), undefined);
+  it('reports the rows above a repo, up to its section heading', () => {
+    const chain: string[] = [];
+    let node: TreeNode | undefined = rowFor('all', 'alpha', 'vendor');
+    while (node) {
+      chain.push(labelOf(node));
+      node = api.provider.getParent(node);
+    }
+    assert.deepStrictEqual(chain, ['vendor', 'alpha', 'All Repositories']);
   });
 
   it('hides a repo through the command, then unhides it', async () => {
     // the whole loop: command writes hiddenRepos, the config listener rescans, the row goes.
     // hideRepo deliberately triggers no refresh of its own.
-    const element = api.provider.findRepoElement(path.join(fixture, 'group', 'sub', 'beta'));
-    assert.ok(element, 'expected an element for beta');
-
-    await vscode.commands.executeCommand('repodock.hideRepo', element);
-    await until(() => !labels().includes('beta (group/sub)'), 'beta to disappear');
+    const hasBeta = () => section('all').includes('  beta');
+    await vscode.commands.executeCommand(
+      'repodock.hideRepo',
+      rowFor('all', 'group', 'sub', 'beta'),
+    );
+    await until(() => !hasBeta(), 'beta to disappear');
 
     await vscode.commands.executeCommand('repodock.unhideAll');
-    await until(() => labels().includes('beta (group/sub)'), 'beta to come back');
+    await until(hasBeta, 'beta to come back');
   });
 
-  it('groups into one section per folder, in configured order', async () => {
+  it('gives each scan folder a row once two of them hold repos', async () => {
     const inner = path.join(fixture, 'group', 'sub');
     await setSetting('directories', [fixture, inner]);
-    await setSetting('groupByFolder', true);
     try {
-      await until(() => rows().length === 2, 'two folder sections');
-      const sections = rows();
-      // section labels are tildified; on Windows the temp dir sits under the home
+      await until(() => section('all').includes(tildify(inner)), 'two scan-folder rows');
+      // folder labels are tildified; on Windows the temp dir sits under the home
       // directory, so the fixture path really does shorten to ~\AppData\...
-      assert.deepStrictEqual(
-        sections.map((section) => section.label),
-        [tildify(fixture), tildify(inner)],
-      );
-
-      // beta is found by both roots; after dedupe it belongs to the inner section only
-      const innerRows = api.provider.getChildren(sections[1]);
-      assert.deepStrictEqual(
-        innerRows.map((row) => row.label),
-        ['beta'],
-      );
-      const child = innerRows[0];
-      assert.ok(child, 'expected a row under the inner section');
-      assert.strictEqual(api.provider.getParent(child), sections[1]);
+      // beta is found by both folders; after dedupe it belongs to the inner one only
+      assert.deepStrictEqual(section('all'), [
+        tildify(fixture),
+        '  alpha',
+        '    vendor',
+        tildify(inner),
+        '  beta',
+      ]);
     } finally {
-      await setSetting('groupByFolder', undefined);
       await setSetting('directories', [fixture]);
     }
   });
@@ -210,34 +257,34 @@ describe('RepoDock', () => {
   it('honours showNestedRepos', async () => {
     await setSetting('showNestedRepos', false);
     try {
-      await until(() => !labels().includes('vendor (alpha)'), 'the nested repo to be hidden');
+      await until(() => !section('all').includes('  vendor'), 'the nested repo to be hidden');
     } finally {
       await setSetting('showNestedRepos', undefined);
     }
   });
 
-  it('floats a pinned repo and restores it on unpin, updating icon and contextValue', async () => {
-    // vendor, not alpha: alpha already sorts first, so pinning it would prove nothing
-    const vendorPath = path.join(fixture, 'alpha', 'vendor');
-    /** The rendered item for vendor, re-read after each command so the state is current. */
-    const vendorItem = (): vscode.TreeItem => {
-      const element = api.provider.findRepoElement(vendorPath);
-      assert.ok(element, 'expected an element for vendor');
-      return api.provider.getTreeItem(element);
-    };
-    const element = api.provider.findRepoElement(vendorPath);
-    assert.ok(element, 'expected an element for vendor');
-    assert.strictEqual(labels()[0], 'alpha', 'vendor should start last');
+  it('adds a Pinned section for a pinned repo and marks it everywhere, until it is unpinned', async () => {
+    await vscode.commands.executeCommand('repodock.pinRepo', rowFor('all', 'alpha', 'vendor'));
+    assert.deepStrictEqual(section('pinned'), ['vendor']);
+    assert.strictEqual(outline()[0], 'Pinned');
+    for (const name of ['pinned', 'all'] as const) {
+      const item = itemFor(name, 'alpha', 'vendor');
+      assert.strictEqual((item.iconPath as vscode.ThemeIcon).id, 'pinned');
+      assert.strictEqual(item.contextValue, 'repoNested-pinned');
+    }
+    // the two rows of one repo need different ids, or VS Code rejects the tree
+    assert.notStrictEqual(
+      itemFor('pinned', 'alpha', 'vendor').id,
+      itemFor('all', 'alpha', 'vendor').id,
+    );
 
-    await vscode.commands.executeCommand('repodock.pinRepo', element);
-    assert.strictEqual(labels()[0], 'vendor (alpha)', 'a pinned repo sorts first');
-    assert.strictEqual((vendorItem().iconPath as vscode.ThemeIcon).id, 'pinned');
-    assert.strictEqual(vendorItem().contextValue, 'repoNested-pinned');
-
-    await vscode.commands.executeCommand('repodock.unpinRepo', element);
-    assert.strictEqual(labels()[0], 'alpha', 'unpinning restores the original order');
-    assert.strictEqual((vendorItem().iconPath as vscode.ThemeIcon).id, 'source-control');
-    assert.strictEqual(vendorItem().contextValue, 'repoNested');
+    // unpinned from its Pinned row, the way the row button does it
+    await vscode.commands.executeCommand('repodock.unpinRepo', rowFor('pinned', 'alpha', 'vendor'));
+    assert.deepStrictEqual(section('pinned'), []);
+    assert.strictEqual(outline()[0], 'All Repositories');
+    const item = itemFor('all', 'alpha', 'vendor');
+    assert.strictEqual((item.iconPath as vscode.ThemeIcon).id, 'source-control');
+    assert.strictEqual(item.contextValue, 'repoNested');
   });
 
   it('rescans when directories change', async () => {

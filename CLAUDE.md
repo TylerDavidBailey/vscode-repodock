@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 RepoDock is a VS Code extension. It scans configured folders for git repositories and
-switches between them through a tree view in the Activity Bar. README.md holds the
+switches between them through a tree view in the Activity Bar. The tree has three
+sections: Pinned, Recent, and All Repositories, the last laid out as the folders on disk. README.md holds the
 user-facing docs. This file covers what those docs leave out.
 
 ## Commands
@@ -18,26 +19,32 @@ user-facing docs. This file covers what those docs leave out.
 ## Architecture
 
 - `src/core/` must never import `vscode`: scanning (`scanner.ts`), `git status` parsing
-  (`git.ts`), labels, sorting, dedupe, and hidden-filtering (`sorting.ts`), path keys
-  (`paths.ts`), shared types (`types.ts`), and a concurrency limiter (`limit.ts`). Put new
-  logic here whenever possible so it stays unit-testable.
-- `src/ext/` wires core into the VS Code API: activation (`extension.ts`), tree
+  (`git.ts`), labels, the pinned and recent lists, dedupe, and hidden-filtering
+  (`sorting.ts`), the folder hierarchy (`tree.ts`), path keys (`paths.ts`), shared types
+  (`types.ts`), and a concurrency limiter (`limit.ts`). Put new logic here whenever possible
+  so it stays unit-testable.
+- `src/ext/` wires core into the VS Code API: activation (`extension.ts`), the scanned
+  repos and their git state (`repoModel.ts`), the tree that renders them
   (`treeProvider.ts`), commands (`commands.ts`), the Manage Folders picker
-  (`folderPicker.ts`), settings (`settings.ts`), and Memento-backed stores
-  (`recency.ts`, `pins.ts`).
+  (`folderPicker.ts`), settings (`settings.ts`), and Memento-backed stores (`recency.ts`,
+  `pins.ts`, `expansion.ts`).
 - Unit tests share fixtures from `test/unit/helpers/`: `createVscodeStub()` for the `vscode`
   module, `fakeMemento()` and `fakeExtensionContext()` for the Memento-backed stores and
-  `activate`, `makeRepo`, `makeGitState`, and `withGitRepos` for repo fixtures, and
-  `required()` to narrow away the `undefined` that `noUncheckedIndexedAccess` adds. The lint
+  `activate`, `makeRepo`, `makeGitState`, and `withGitRepos` for repo fixtures,
+  `createProvider()` and `sectionRows()` for a provider wired the way `activate` wires it,
+  and `required()` to narrow away the `undefined` that `noUncheckedIndexedAccess` adds. The lint
   config forbids `!`. Because `vi.mock` factories are hoisted above imports, wire the stub up
   through a dynamic import and read recorded calls from the `stubState` singleton.
   `test/unit/treeProvider.test.ts` shows the pattern.
+- A provider caches its last render until VS Code asks for the root again. A test that
+  pins or opens a repo and then looks a row up has to call `provider.getChildren()` first,
+  the way VS Code does after a full redraw.
 
 ## Testing
 
 - The stub records every API call into a `StubState`: `commands` (id to handler, so a test
-  can invoke a command the way VS Code would), `contextKeys`, `quickPick`, `treeView`,
-  `terminals`, and `fire*` helpers that play the configuration, window-state, and
+  can invoke a command the way VS Code would), `contextKeys`, `quickPick`, `treeViews` (by
+  view id, with `fireVisibility`, `fireCollapse`, and `fireExpand`), `terminals`, and `fire*` helpers that play the configuration, window-state, and
   workspace-folder events. Extend the stub rather than writing a second one.
 - `test/unit/contributes.test.ts` guards the `package.json` seam: contributed commands
   against registered ones, the `view/item/context` regexes against the `contextValue`
@@ -86,6 +93,20 @@ Follows the TSDoc spec and the Microsoft TypeScript and VS Code coding guideline
   changelog from them, and PR titles must follow them, because PRs are squash-merged.
 - Two overlapping scan roots can both turn up the same repo, so always dedupe by
   `repo.path` (`dedupeRepos` in `sorting.ts`).
+- The three sections are rows of one tree, not three views. VS Code gives each view in a
+  container a minimum body height of about 120px and splits the sidebar between them, so
+  a two-row Pinned view sat above a block of empty space. Do not split them back out.
+- One repo can have a row in each section, and VS Code rejects a tree with a duplicate
+  id, so every id carries its section or row kind (`RepoTreeProvider.idOf`).
+- VS Code forgets a tree's fold state when the window's workspace changes, which is what
+  opening a repo does. `ExpansionStore` keeps it in global state, keyed by row id.
+- Do not call `TreeView.reveal` on this tree. Before VS Code 1.148 (seen in VSCodium
+  1.143), revealing a nested row while the tree is still loading can leave one folder
+  showing another folder's rows until the next full refresh. A reveal into All Repositories
+  would also scroll Pinned and Recent out of view.
+- The screenshots in `docs/` are crops of the `sections`, `tooltip`, `context-menu`, and
+  `light-theme` shots from the `editor-test` skill's VS Code run. Regenerate them from
+  there when the sidebar changes, so the README never shows names from a real machine.
 - Compare configured paths and user paths with `canonicalPathKey` after `expandPath`.
   Display paths with `tildify`.
 - TypeScript 6 requires an explicit `"types"` list in tsconfig, because automatic `@types`
