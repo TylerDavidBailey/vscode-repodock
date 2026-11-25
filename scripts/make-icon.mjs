@@ -1,184 +1,190 @@
-// Generates media/icon.png (128x128 marketplace icon) with zero native dependencies:
-// software-rendered shapes encoded as a PNG via node's zlib.
+// Generates media/icon.png, the Marketplace icon, with zero native dependencies: shapes are
+// rasterized in software and encoded as a PNG through node's zlib.
+//
+// The icon is one glyph in white on a flat tile. media/repodock.svg is the same glyph as a
+// single-color outline for the Activity Bar, so a change of glyph here belongs there too.
 import { deflateSync } from 'node:zlib';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SIZE = 128;
-const W = SIZE;
-const H = SIZE;
+// 256 rather than the 128 minimum, so the icon stays sharp on high-density displays
+const SIZE = 256;
+// the tile is authored on a 128-unit grid
+const GRID = 128;
+const SCALE = SIZE / GRID;
+
+// One flat mid-tone, because the icon is shown on whatever theme the user runs: a dark tile
+// disappears into a dark theme and a light one into a light theme.
+const TILE_COLOR = [99, 102, 241]; // #6366f1
+const GLYPH_COLOR = [255, 255, 255];
+
+// The "folder-git" icon from Lucide (https://lucide.dev/icons/folder-git), ISC License, with
+// its geometry unchanged. THIRD_PARTY_NOTICES.md carries the license text. Lucide draws on a
+// 24-unit box with a 2-unit stroke and round caps and joins.
+const GLYPH_PATHS = [
+  'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z',
+  'M14 13h3',
+  'M7 13h3',
+];
+const GLYPH_CIRCLES = [{ centerX: 12, centerY: 13, radius: 2 }];
+const GLYPH_STROKE = 2;
+// grid units per glyph unit, and the inset that centers the 24-unit box on the tile
+const GLYPH_SCALE = 3;
+const GLYPH_OFFSET = (GRID - 24 * GLYPH_SCALE) / 2;
 
 // straight-alpha float channels
-const R = new Float64Array(W * H);
-const G = new Float64Array(W * H);
-const B = new Float64Array(W * H);
-const A = new Float64Array(W * H);
+const red = new Float64Array(SIZE * SIZE);
+const green = new Float64Array(SIZE * SIZE);
+const blue = new Float64Array(SIZE * SIZE);
+const alpha = new Float64Array(SIZE * SIZE);
 
-function blend(x, y, r, g, b, coverage) {
-  if (x < 0 || y < 0 || x >= W || y >= H || coverage <= 0) return;
-  const i = y * W + x;
-  const aS = Math.min(coverage, 1);
-  const aD = A[i];
-  const aOut = aS + aD * (1 - aS);
-  if (aOut === 0) return;
-  R[i] = (r * aS + R[i] * aD * (1 - aS)) / aOut;
-  G[i] = (g * aS + G[i] * aD * (1 - aS)) / aOut;
-  B[i] = (b * aS + B[i] * aD * (1 - aS)) / aOut;
-  A[i] = aOut;
+function blendPixel(index, [r, g, b], coverage) {
+  if (coverage <= 0) return;
+  const below = alpha[index] * (1 - coverage);
+  const out = coverage + below;
+  red[index] = (r * coverage + red[index] * below) / out;
+  green[index] = (g * coverage + green[index] * below) / out;
+  blue[index] = (b * coverage + blue[index] * below) / out;
+  alpha[index] = out;
 }
 
-/** coverage from a signed distance: 1 inside, antialiased ~1px edge */
-const cov = (dist) => Math.max(0, Math.min(1, 0.5 - dist));
-
-function roundedRect(cx, cy, w, h, radius, colorAt) {
-  const x0 = Math.floor(cx - w / 2 - 1);
-  const x1 = Math.ceil(cx + w / 2 + 1);
-  const y0 = Math.floor(cy - h / 2 - 1);
-  const y1 = Math.ceil(cy + h / 2 + 1);
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = Math.max(Math.abs(x + 0.5 - cx) - (w / 2 - radius), 0);
-      const dy = Math.max(Math.abs(y + 0.5 - cy) - (h / 2 - radius), 0);
-      const dist = Math.hypot(dx, dy) - radius;
-      const [r, g, b] = colorAt(y);
-      blend(x, y, r, g, b, cov(dist));
+// Paints a shape given as a signed distance in grid units, negative inside. The distance
+// becomes coverage across one pixel, which antialiases the edge.
+function paint(distanceTo, color) {
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const distance = distanceTo((x + 0.5) / SCALE, (y + 0.5) / SCALE) * SCALE;
+      blendPixel(y * SIZE + x, color, Math.max(0, Math.min(1, 0.5 - distance)));
     }
   }
 }
 
-/** paints a signed-distance function (px units, negative inside) in one color */
-function paintDist(x0, y0, x1, y1, dist, [r, g, b]) {
-  for (let y = Math.floor(y0); y <= Math.ceil(y1); y++) {
-    for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
-      blend(x, y, r, g, b, cov(dist(x + 0.5, y + 0.5)));
+function roundedSquareDistance(size, radius) {
+  const half = size / 2;
+  return (x, y) => {
+    const dx = Math.max(Math.abs(x - half) - (half - radius), 0);
+    const dy = Math.max(Math.abs(y - half) - (half - radius), 0);
+    return Math.hypot(dx, dy) - radius;
+  };
+}
+
+// SVG's endpoint form of a circular arc, as points along it
+function arcPoints(startX, startY, radius, isLargeArc, isPositiveSweep, endX, endY) {
+  const halfX = (startX - endX) / 2;
+  const halfY = (startY - endY) / 2;
+  const halfChordSquared = halfX * halfX + halfY * halfY;
+  const side = isLargeArc === isPositiveSweep ? -1 : 1;
+  const offset =
+    side * Math.sqrt(Math.max(0, radius * radius - halfChordSquared) / halfChordSquared);
+  const centerX = (startX + endX) / 2 + offset * halfY;
+  const centerY = (startY + endY) / 2 - offset * halfX;
+  const startAngle = Math.atan2(startY - centerY, startX - centerX);
+  let sweep = Math.atan2(endY - centerY, endX - centerX) - startAngle;
+  if (isPositiveSweep && sweep < 0) sweep += 2 * Math.PI;
+  if (!isPositiveSweep && sweep > 0) sweep -= 2 * Math.PI;
+  const steps = 12;
+  const points = [];
+  for (let step = 1; step <= steps; step++) {
+    const angle = startAngle + (sweep * step) / steps;
+    points.push([centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle)]);
+  }
+  return points;
+}
+
+// Flattens the subset of SVG path syntax Lucide's icon uses (M, L, H, V, Z, and circular A,
+// absolute and relative) into one polyline.
+function flattenPath(path) {
+  const tokens = path.match(/[a-zA-Z]|-?\d*\.?\d+/g) ?? [];
+  const points = [];
+  let x = 0;
+  let y = 0;
+  let command = '';
+  let index = 0;
+  const next = () => Number(tokens[index++]);
+  while (index < tokens.length) {
+    if (/[a-zA-Z]/.test(tokens[index])) command = tokens[index++];
+    const isRelative = command === command.toLowerCase();
+    const baseX = isRelative ? x : 0;
+    const baseY = isRelative ? y : 0;
+    switch (command.toUpperCase()) {
+      case 'M':
+      case 'L':
+        x = baseX + next();
+        y = baseY + next();
+        points.push([x, y]);
+        break;
+      case 'H':
+        x = baseX + next();
+        points.push([x, y]);
+        break;
+      case 'V':
+        y = baseY + next();
+        points.push([x, y]);
+        break;
+      case 'A': {
+        const radius = next();
+        // the second radius and the rotation, which a circular arc does not need
+        index += 2;
+        const isLargeArc = next() === 1;
+        const isPositiveSweep = next() === 1;
+        const endX = baseX + next();
+        const endY = baseY + next();
+        points.push(...arcPoints(x, y, radius, isLargeArc, isPositiveSweep, endX, endY));
+        x = endX;
+        y = endY;
+        break;
+      }
+      case 'Z':
+        points.push(points[0]);
+        break;
+      default:
+        throw new Error(`unsupported path command: ${command}`);
     }
   }
+  return points;
 }
 
-// background: full-bleed rounded square, near-black with a whisper of depth
-const top = [38, 38, 42]; // #26262a
-const bottom = [14, 14, 16]; // #0e0e10
-roundedRect(64, 64, 128, 128, 28, (y) => {
-  const t = Math.max(0, Math.min(1, y / H));
-  return [
-    top[0] + (bottom[0] - top[0]) * t,
-    top[1] + (bottom[1] - top[1]) * t,
-    top[2] + (bottom[2] - top[2]) * t,
-  ];
-});
-
-// ---- branch-in-a-box glyph, same geometry as media/repodock.svg ----
-// glyph is authored in a 24-unit box, inset and scaled like the sidebar icon
-const GLYPH_SCALE = 0.78;
-const GLYPH_OFFSET = 2.6;
-const PX = SIZE / 24;
-const gx = (v) => (GLYPH_OFFSET + GLYPH_SCALE * v) * PX;
-const STROKE = 1.7 * GLYPH_SCALE * PX;
-const white = [255, 255, 255];
-
-function strokeRoundedRect(cx, cy, w, h, radius) {
-  const [pcx, pcy] = [gx(cx), gx(cy)];
-  const [pw, ph, pr] = [w * GLYPH_SCALE * PX, h * GLYPH_SCALE * PX, radius * GLYPH_SCALE * PX];
-  const pad = STROKE;
-  paintDist(
-    pcx - pw / 2 - pad,
-    pcy - ph / 2 - pad,
-    pcx + pw / 2 + pad,
-    pcy + ph / 2 + pad,
-    (x, y) => {
-      const dx = Math.max(Math.abs(x - pcx) - (pw / 2 - pr), 0);
-      const dy = Math.max(Math.abs(y - pcy) - (ph / 2 - pr), 0);
-      return Math.abs(Math.hypot(dx, dy) - pr) - STROKE / 2;
-    },
-    white,
-  );
+function circlePoints({ centerX, centerY, radius }) {
+  const steps = 48;
+  const points = [];
+  for (let step = 0; step <= steps; step++) {
+    const angle = (2 * Math.PI * step) / steps;
+    points.push([centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle)]);
+  }
+  return points;
 }
 
-function strokeCircle(cx, cy, radius) {
-  const [pcx, pcy, pr] = [gx(cx), gx(cy), radius * GLYPH_SCALE * PX];
-  const pad = pr + STROKE;
-  paintDist(
-    pcx - pad,
-    pcy - pad,
-    pcx + pad,
-    pcy + pad,
-    (x, y) => Math.abs(Math.hypot(x - pcx, y - pcy) - pr) - STROKE / 2,
-    white,
-  );
-}
-
-/** stroked polyline with round caps (also used to approximate curves) */
-function strokePolyline(points) {
-  const px = points.map(([x, y]) => [gx(x), gx(y)]);
-  const xs = px.map((p) => p[0]);
-  const ys = px.map((p) => p[1]);
-  paintDist(
-    Math.min(...xs) - STROKE,
-    Math.min(...ys) - STROKE,
-    Math.max(...xs) + STROKE,
-    Math.max(...ys) + STROKE,
-    (x, y) => {
-      let best = Infinity;
-      for (let i = 0; i < px.length - 1; i++) {
-        const [ax, ay] = px[i];
-        const [bx, by] = px[i + 1];
+// Distance to a stroked set of polylines. Measuring from the centerline gives round caps and
+// round joins for free, which is how Lucide draws.
+function strokeDistance(polylines, strokeWidth) {
+  return (x, y) => {
+    let nearest = Infinity;
+    for (const points of polylines) {
+      for (let i = 0; i < points.length - 1; i++) {
+        const [ax, ay] = points[i];
+        const [bx, by] = points[i + 1];
         const abx = bx - ax;
         const aby = by - ay;
-        const lenSq = abx * abx + aby * aby;
+        const lengthSquared = abx * abx + aby * aby;
         const t =
-          lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * abx + (y - ay) * aby) / lenSq));
-        best = Math.min(best, Math.hypot(x - (ax + abx * t), y - (ay + aby * t)));
+          lengthSquared === 0
+            ? 0
+            : Math.max(0, Math.min(1, ((x - ax) * abx + (y - ay) * aby) / lengthSquared));
+        nearest = Math.min(nearest, Math.hypot(x - (ax + abx * t), y - (ay + aby * t)));
       }
-      return best - STROKE / 2;
-    },
-    white,
-  );
+    }
+    return nearest - strokeWidth / 2;
+  };
 }
 
-function cubicPoints(p0, c1, c2, p1, steps = 24) {
-  const out = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const u = 1 - t;
-    out.push([
-      u * u * u * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p1[0],
-      u * u * u * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p1[1],
-    ]);
-  }
-  return out;
-}
+// full-bleed tile
+paint(roundedSquareDistance(GRID, 28), TILE_COLOR);
 
-function arcPoints(cx, cy, radius, a0, a1, steps = 10) {
-  const out = [];
-  for (let i = 0; i <= steps; i++) {
-    const a = a0 + ((a1 - a0) * i) / steps;
-    out.push([cx + radius * Math.cos(a), cy + radius * Math.sin(a)]);
-  }
-  return out;
-}
-
-// back box peeking out behind the front one — the "many repos" half of the mark
-strokePolyline([
-  [8.5, 4.5],
-  ...arcPoints(11, 4, 2.5, Math.PI, 1.5 * Math.PI),
-  [19, 1.5],
-  ...arcPoints(19, 4, 2.5, 1.5 * Math.PI, 2 * Math.PI),
-  [21.5, 12],
-  ...arcPoints(19, 12, 2.5, 0, 0.5 * Math.PI),
-  [18.5, 14.5],
-]);
-
-// front box with the branch glyph
-strokeRoundedRect(10, 14, 15, 15, 3.8);
-strokeCircle(7.6, 11, 1.4);
-strokeCircle(7.6, 17, 1.4);
-strokeCircle(12.9, 12.5, 1.4);
-strokePolyline([
-  [7.6, 12.4],
-  [7.6, 15.6],
-]);
-strokePolyline(cubicPoints([11.6, 13], [9.6, 13.4], [8.2, 14.1], [7.8, 15.4]));
+const glyph = [...GLYPH_PATHS.map(flattenPath), ...GLYPH_CIRCLES.map(circlePoints)].map((points) =>
+  points.map(([x, y]) => [GLYPH_OFFSET + x * GLYPH_SCALE, GLYPH_OFFSET + y * GLYPH_SCALE]),
+);
+paint(strokeDistance(glyph, GLYPH_STROKE * GLYPH_SCALE), GLYPH_COLOR);
 
 // ---- PNG encoding ----
 const CRC_TABLE = new Int32Array(256);
@@ -202,21 +208,21 @@ function chunk(type, data) {
 }
 
 const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(W, 0);
-ihdr.writeUInt32BE(H, 4);
+ihdr.writeUInt32BE(SIZE, 0);
+ihdr.writeUInt32BE(SIZE, 4);
 ihdr[8] = 8; // bit depth
 ihdr[9] = 6; // RGBA
-const raw = Buffer.alloc(H * (W * 4 + 1));
-for (let y = 0; y < H; y++) {
-  const rowStart = y * (W * 4 + 1);
+const raw = Buffer.alloc(SIZE * (SIZE * 4 + 1));
+for (let y = 0; y < SIZE; y++) {
+  const rowStart = y * (SIZE * 4 + 1);
   raw[rowStart] = 0; // filter: none
-  for (let x = 0; x < W; x++) {
-    const i = y * W + x;
+  for (let x = 0; x < SIZE; x++) {
+    const i = y * SIZE + x;
     const offset = rowStart + 1 + x * 4;
-    raw[offset] = Math.round(R[i]);
-    raw[offset + 1] = Math.round(G[i]);
-    raw[offset + 2] = Math.round(B[i]);
-    raw[offset + 3] = Math.round(A[i] * 255);
+    raw[offset] = Math.round(red[i]);
+    raw[offset + 1] = Math.round(green[i]);
+    raw[offset + 2] = Math.round(blue[i]);
+    raw[offset + 3] = Math.round(alpha[i] * 255);
   }
 }
 const png = Buffer.concat([
