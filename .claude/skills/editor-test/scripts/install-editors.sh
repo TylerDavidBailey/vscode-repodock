@@ -24,6 +24,19 @@ EDITORS="$E2E_DIR/editors"
 DOWNLOADS="$E2E_DIR/downloads"
 mkdir -p "$EDITORS" "$DOWNLOADS"
 
+# Stops the run unless a download has the checksum its publisher lists for it. Both editors
+# are fetched over HTTPS and then executed, so a truncated or swapped file must not get
+# as far as being unpacked.
+verify_sha256() {
+  local file=$1 expected=$2 actual
+  actual="$(sha256sum "$file" | cut -d' ' -f1)"
+  if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+    echo "checksum mismatch for $file: expected '${expected:-none published}', got $actual" >&2
+    rm -f "$file"
+    exit 1
+  fi
+}
+
 # Each archive is unpacked into its own freshly created directory, never over an old one,
 # so a half-finished earlier run cannot leave a mix of two versions behind.
 fresh_dir() {
@@ -42,9 +55,18 @@ install_vscode() {
     echo "vscode: already unpacked ($(cat "$dest/VERSION"))"
     return
   fi
-  echo "vscode: downloading ${VSCODE_VERSION:-latest} for linux-$CODE_ARCH"
-  curl -fsSL --retry 3 -o "$DOWNLOADS/vscode.tar.gz" \
-    "https://update.code.visualstudio.com/${VSCODE_VERSION:-latest}/linux-$CODE_ARCH/stable"
+  # the update service answers with the download URL and its SHA-256
+  local api="https://update.code.visualstudio.com/api" release url sha256
+  if [ -n "${VSCODE_VERSION:-}" ]; then
+    release="$(curl -fsSL --retry 3 "$api/versions/$VSCODE_VERSION/linux-$CODE_ARCH/stable")"
+  else
+    release="$(curl -fsSL --retry 3 "$api/update/linux-$CODE_ARCH/stable/latest")"
+  fi
+  url="$(node -p 'JSON.parse(process.argv[1]).url' "$release")"
+  sha256="$(node -p 'JSON.parse(process.argv[1]).sha256hash' "$release")"
+  echo "vscode: downloading $(node -p 'JSON.parse(process.argv[1]).name' "$release") for linux-$CODE_ARCH"
+  curl -fsSL --retry 3 -o "$DOWNLOADS/vscode.tar.gz" "$url"
+  verify_sha256 "$DOWNLOADS/vscode.tar.gz" "$sha256"
   fresh_dir "$dest"
   tar -xzf "$DOWNLOADS/vscode.tar.gz" -C "$dest"
   rm -f "$DOWNLOADS/vscode.tar.gz"
@@ -60,19 +82,30 @@ install_vscodium() {
   fi
   # VSCodium's GitHub releases are out of reach in a cloud session, whose GitHub access is
   # scoped to this repository. Its apt repository is plain HTTPS and carries the same builds.
-  local base="https://download.vscodium.com/debs" filename
-  filename="$(
+  local base="https://download.vscodium.com/debs" build filename sha256
+  # one line per build: version, file, and the SHA-256 the index lists for that file
+  build="$(
     curl -fsSL --retry 3 "$base/dists/vscodium/main/binary-$DEB_ARCH/Packages" |
-      awk '/^Package: /{pkg=$2} /^Version: /{ver=$2} /^Filename: /{if (pkg=="codium") print ver, $2}' |
+      awk '
+        /^Package: /  { pkg = $2 }
+        /^Version: /  { ver = $2 }
+        /^Filename: / { file = $2 }
+        /^SHA256: /   { sum = $2 }
+        /^$/          { if (pkg == "codium") print ver, file, sum; pkg = ver = file = sum = "" }
+        END           { if (pkg == "codium") print ver, file, sum }
+      ' |
       { if [ -n "${VSCODIUM_VERSION:-}" ]; then grep "^$VSCODIUM_VERSION " || true; else sort -V; fi; } |
-      tail -1 | cut -d' ' -f2
+      tail -1
   )"
+  filename="$(echo "$build" | cut -d' ' -f2)"
+  sha256="$(echo "$build" | cut -d' ' -f3)"
   if [ -z "$filename" ]; then
     echo "vscodium: no build ${VSCODIUM_VERSION:-} found in the apt index for $DEB_ARCH" >&2
     exit 1
   fi
   echo "vscodium: downloading $filename"
   curl -fsSL --retry 3 -o "$DOWNLOADS/codium.deb" "$base/$filename"
+  verify_sha256 "$DOWNLOADS/codium.deb" "$sha256"
   fresh_dir "$dest"
   dpkg-deb -x "$DOWNLOADS/codium.deb" "$dest"
   rm -f "$DOWNLOADS/codium.deb"

@@ -132,7 +132,8 @@ State these as untested when a PR touches them, or test them by hand:
   settings and repositories out of the run.
 - **Network.** The scripts download from `update.code.visualstudio.com`,
   `vscode.download.prss.microsoft.com`, and `download.vscodium.com`. An environment with
-  limited network access has to allow all three. VSCodium's GitHub releases are not
+  limited network access has to allow all three. Each download is checked against the
+  SHA-256 its publisher lists before it is unpacked. VSCodium's GitHub releases are not
   reachable from a cloud session, which is why the script uses its apt repository.
 - **Versions.** `install-editors.sh` takes the newest release of each editor the first
   time, then keeps it. VSCodium usually trails VS Code by a few releases, so a difference

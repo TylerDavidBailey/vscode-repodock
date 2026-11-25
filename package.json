@@ -35,10 +35,11 @@
     },
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Folder locations and exclude patterns from workspace settings are ignored in Restricted Mode.",
+      "description": "Folder locations, exclude patterns, and scan depth from workspace settings are ignored in Restricted Mode.",
       "restrictedConfigurations": [
         "repodock.directories",
-        "repodock.exclude"
+        "repodock.exclude",
+        "repodock.maxDepth"
       ]
     }
   },

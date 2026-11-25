@@ -140,8 +140,17 @@ export function tildify(p: string): string {
  * section prefix. Mirrors `capabilities.untrustedWorkspaces.restrictedConfigurations` in
  * `package.json`, which is the list VS Code enforces; every other setting keeps its
  * workspace value in an untrusted workspace.
+ *
+ * These are the settings that decide where RepoDock walks the disk and runs git, which a
+ * folder the user has not trusted must not be able to steer: `maxDepth` is here because a
+ * checked-out `.vscode/settings.json` could otherwise push scans of the user's own
+ * folders to the maximum depth.
  */
-export const RESTRICTED_SETTINGS: ReadonlySet<string> = new Set(['directories', 'exclude']);
+export const RESTRICTED_SETTINGS: ReadonlySet<string> = new Set([
+  'directories',
+  'exclude',
+  'maxDepth',
+]);
 
 /**
  * The scope whose value `get` currently returns for `key`, so that a write lands where the

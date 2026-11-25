@@ -107,6 +107,12 @@ Follows the TSDoc spec and the Microsoft TypeScript and VS Code coding guideline
 - The screenshots in `docs/` are crops of the `sections`, `tooltip`, `context-menu`, and
   `light-theme` shots from the `editor-test` skill's VS Code run. Regenerate them from
   there when the sidebar changes, so the README never shows names from a real machine.
+- Every git call goes through `runGit` in `src/core/git.ts`, which applies the hardening
+  listed in SECURITY.md. RepoDock runs git in repositories the user never opened, and git
+  runs programs named in a repository's own config (fsmonitor, filter drivers, hooks, the
+  ssh command of a lazy fetch). Never add a git call that bypasses `runGit`, never start
+  git by bare name, and add a case to `test/unit/git-hardening.test.ts` for any new
+  subcommand.
 - Compare configured paths and user paths with `canonicalPathKey` after `expandPath`.
   Display paths with `tildify`.
 - TypeScript 6 requires an explicit `"types"` list in tsconfig, because automatic `@types`
