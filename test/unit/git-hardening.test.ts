@@ -310,17 +310,42 @@ describe('resolveExecutable', () => {
   });
 
   it('reads a Windows PATH by its own rules: semicolons, quotes, and no relative entries', async () => {
-    // nothing exists at these paths here, so this checks they are parsed without
-    // throwing and that the relative entries are not tried against this directory
+    // Run from a directory holding a git.exe, with only relative entries and one absolute
+    // entry that does not exist. Finding anything would mean a relative entry was honored.
     const previous = process.cwd();
     process.chdir(bin);
     try {
       await fs.writeFile(path.join(bin, 'git.exe'), '', { mode: 0o755 });
-      const searchPath = '.;;"C:\\Program Files\\Git\\cmd";relative\\dir';
+      const searchPath = '.;;"C:\\repodock-no-such-directory\\cmd";relative\\dir';
       expect(await resolveExecutable('git', searchPath, 'win32')).toBeUndefined();
     } finally {
       process.chdir(previous);
       await fs.rm(path.join(bin, 'git.exe'), { force: true });
     }
+  });
+
+  const describeWindows = process.platform === 'win32' ? describe : describe.skip;
+
+  describeWindows('on Windows', () => {
+    it('finds git on the real PATH, as an absolute path to an .exe', async () => {
+      const found = await resolveExecutable('git');
+      expect(found && path.isAbsolute(found)).toBe(true);
+      expect(found?.toLowerCase().endsWith('.exe')).toBe(true);
+    });
+
+    it('finds an .exe through an absolute entry, quoted or not, and never through the current directory', async () => {
+      const previous = process.cwd();
+      process.chdir(bin);
+      try {
+        await fs.writeFile(path.join(bin, 'planted.exe'), '');
+        // the planted file sits in the current directory, which a bare name would reach
+        expect(await resolveExecutable('planted', '.;;relative')).toBeUndefined();
+        expect(await resolveExecutable('planted', `.;${bin}`)).toBe(path.join(bin, 'planted.exe'));
+        expect(await resolveExecutable('planted', `"${bin}"`)).toBe(path.join(bin, 'planted.exe'));
+      } finally {
+        process.chdir(previous);
+        await fs.rm(path.join(bin, 'planted.exe'), { force: true });
+      }
+    });
   });
 });
