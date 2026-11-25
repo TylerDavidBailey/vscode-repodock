@@ -1,0 +1,465 @@
+#!/usr/bin/env node
+// Runs the scenarios in scenarios.mjs against RepoDock, loaded from this checkout into a
+// real VS Code and a real VSCodium. Writes screenshots, report.json, and report.md to
+// <work dir>/out and exits non-zero when any scenario fails.
+//
+//   node run-scenarios.mjs [--editor vscode|vscodium|both] [--only id,id] [--list]
+
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
+import * as path from 'node:path';
+import { scenarios } from './scenarios.mjs';
+
+// functions handed to page.evaluate run inside the editor window, where `document` exists
+/* global document */
+
+const REPO = path.resolve(import.meta.dirname, '../../../..');
+const E2E_DIR = process.env.REPODOCK_E2E_DIR ?? '/tmp/repodock-e2e';
+const HOME = path.join(E2E_DIR, 'home');
+const OUT = path.join(E2E_DIR, 'out');
+const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64';
+
+const EDITORS = {
+  vscode: {
+    label: 'VS Code',
+    binary: path.join(E2E_DIR, 'editors/vscode', `VSCode-linux-${ARCH}`, 'code'),
+  },
+  vscodium: {
+    label: 'VSCodium',
+    binary: path.join(E2E_DIR, 'editors/vscodium/usr/share/codium/codium'),
+  },
+};
+
+/** The repository the editor window opens on, which RepoDock marks as current. */
+const CURRENT_REPO = 'code/frontend/aurora-web';
+
+/** Every scenario starts from these, plus whatever its own `settings` adds. */
+const BASE_SETTINGS = {
+  'repodock.directories': ['~/code', '~/work'],
+  'workbench.startupEditor': 'none',
+  'security.workspace.trust.enabled': false,
+  'update.mode': 'none',
+  'telemetry.telemetryLevel': 'off',
+  // Linux can hand menus to the OS, where they exist in no DOM and no screenshot
+  'window.titleBarStyle': 'custom',
+  'window.commandCenter': false,
+  'chat.commandCenter.enabled': false,
+  'workbench.secondarySideBar.defaultVisibility': 'hidden',
+  'workbench.tips.enabled': false,
+  'extensions.ignoreRecommendations': true,
+  'git.openRepositoryInParentFolders': 'never',
+};
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/** Pins and last-opened times written into the profile before launch, as fixture paths. */
+const SEED = {
+  pins: ['code/services/billing-api', 'work/infra-terraform'],
+  openedAgo: {
+    'code/services/billing-api': 42 * MINUTE,
+    'code/services/auth-service': 5 * HOUR,
+    'work/clients/acme-portal': DAY,
+    'code/frontend/design-system': 3 * DAY,
+    'code/tools/cli': 9 * DAY,
+    'code/dotfiles': 40 * DAY,
+  },
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function parseArgs(argv) {
+  const args = { editor: 'both', only: undefined, list: false };
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--list') args.list = true;
+    else if (arg === '--editor') args.editor = argv[++index];
+    else if (arg === '--only') args.only = argv[++index].split(',');
+    else throw new Error(`unknown argument: ${arg}`);
+  }
+  if (!['vscode', 'vscodium', 'both'].includes(args.editor)) {
+    throw new Error(`--editor must be vscode, vscodium, or both (got ${args.editor})`);
+  }
+  return args;
+}
+
+function loadPlaywright() {
+  // require, not import: the cloud image installs Playwright globally and exposes it
+  // through NODE_PATH, which ES module resolution ignores
+  const require = createRequire(import.meta.url);
+  for (const name of ['playwright', 'playwright-core']) {
+    try {
+      return require(name);
+    } catch {
+      // try the next package name
+    }
+  }
+  throw new Error(
+    'Playwright is not installed. Cloud sessions ship it; elsewhere run `npm install -g playwright-core`.',
+  );
+}
+
+function checkPrerequisites(editorIds) {
+  // The editor creates a unix socket inside its profile directory, and socket paths are
+  // capped at 107 bytes. A longer work dir makes the editor exit right after launch with
+  // nothing more than a warning in its log.
+  if (path.join(E2E_DIR, 'profiles', 'vscodium').length > 80) {
+    throw new Error(
+      `The work dir ${E2E_DIR} is too long for the editor's IPC socket. ` +
+        'Symlink a short path to it and set REPODOCK_E2E_DIR to that path.',
+    );
+  }
+  for (const id of editorIds) {
+    if (!fs.existsSync(EDITORS[id].binary)) {
+      throw new Error(`${EDITORS[id].label} is not unpacked. Run install-editors.sh first.`);
+    }
+  }
+  if (!fs.existsSync(path.join(HOME, '.repodock-fixtures'))) {
+    throw new Error('Fixtures are missing. Run make-fixtures.sh first.');
+  }
+}
+
+/**
+ * Writes the extension's global state before the editor first opens the profile, so pins
+ * and a spread of last-opened times exist without clicking through the UI to create them.
+ * The editor keeps extension state in an SQLite table keyed by extension id.
+ */
+async function seedGlobalState(profile) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const now = Date.now();
+  const state = {
+    'repodock.pins': SEED.pins.map((repo) => path.join(HOME, repo)),
+    'repodock.recency': Object.fromEntries(
+      Object.entries(SEED.openedAgo).map(([repo, ago]) => [path.join(HOME, repo), now - ago]),
+    ),
+  };
+  const directory = path.join(profile, 'User', 'globalStorage');
+  fs.mkdirSync(directory, { recursive: true });
+  const database = new DatabaseSync(path.join(directory, 'state.vscdb'));
+  database.exec(
+    'CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)',
+  );
+  database
+    .prepare('INSERT INTO ItemTable (key, value) VALUES (?, ?)')
+    .run('tylerdavidbailey.repodock', JSON.stringify(state));
+  database.close();
+}
+
+/** The helpers a scenario drives the editor with. Everything reads the live DOM. */
+function createUi(page, editorId, profile) {
+  const settingsFile = path.join(profile, 'User', 'settings.json');
+  const view = '.part.sidebar';
+
+  const ui = {
+    page,
+    editorId,
+    /** Absolute path of a fixture, given its path below the fake home. */
+    fixture: (relative) => path.join(HOME, relative),
+
+    /** Replaces the user settings with the base settings plus `overrides`. */
+    setSettings(overrides = {}) {
+      fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+      fs.writeFileSync(settingsFile, JSON.stringify({ ...BASE_SETTINGS, ...overrides }, null, 2));
+    },
+
+    /** What the extension itself last wrote to user settings. */
+    readSettings: () => JSON.parse(fs.readFileSync(settingsFile, 'utf8')),
+
+    /**
+     * Retries `check` until it stops throwing. Every assertion about the UI goes through
+     * this: scans, git loads, and settings reloads all land asynchronously, so a single
+     * read right after an action races them.
+     */
+    async eventually(check, timeoutMs = 15_000) {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        try {
+          return await check();
+        } catch (error) {
+          if (Date.now() > deadline) throw error;
+          await sleep(250);
+        }
+      }
+    },
+
+    /** The rendered tree rows, top to bottom. Only rows scrolled into view exist. */
+    rows: () =>
+      page.evaluate((selector) => {
+        const text = (row, part) => row.querySelector(part)?.textContent ?? '';
+        return [...document.querySelectorAll(`${selector} .pane-body .monaco-list-row`)]
+          .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index))
+          .map((row) => ({
+            label: text(row, '.label-name'),
+            description: text(row, '.label-description'),
+            level: Number(row.getAttribute('aria-level')),
+            total: Number(row.getAttribute('aria-setsize')),
+            selected: row.getAttribute('aria-selected') === 'true',
+            expanded: row.getAttribute('aria-expanded'),
+          }));
+      }, view),
+
+    labels: async () => (await ui.rows()).map((row) => row.label),
+
+    row: (label) =>
+      page
+        .locator(`${view} .pane-body .monaco-list-row`)
+        .filter({ has: page.locator('.label-name', { hasText: label }) })
+        .first(),
+
+    /** Runs a command by its Command Palette title, the way a user would. */
+    async command(title) {
+      await page.keyboard.press('F1');
+      const input = page.locator('.quick-input-widget input.input');
+      await input.waitFor({ state: 'visible' });
+      await input.fill(`>${title}`);
+      await sleep(400);
+      await page.keyboard.press('Enter');
+      await sleep(400);
+    },
+
+    /** Hovers a row until its tooltip shows, and returns the tooltip's text and HTML. */
+    async tooltip(label) {
+      await ui.row(label).hover();
+      const hover = page.locator('.monaco-hover:not(.hidden) .hover-contents').last();
+      await hover.waitFor({ state: 'visible', timeout: 10_000 });
+      return { text: await hover.innerText(), html: await hover.innerHTML() };
+    },
+
+    /** Right-clicks a row and returns the labels of its context menu, top to bottom. */
+    async openContextMenu(label) {
+      // an open menu covers the tree with a click shield, so a second right-click never lands
+      if (await page.locator('.context-view .monaco-menu').isVisible()) await ui.dismiss();
+      await ui.row(label).click({ button: 'right' });
+      const items = page.locator('.context-view .monaco-menu .action-item:not(.disabled)');
+      await items.first().waitFor({ state: 'visible' });
+      return (await items.locator('.action-label').allInnerTexts()).filter(Boolean);
+    },
+
+    /** Runs an item of the open context menu, matched by its exact label. */
+    async chooseMenuItem(text) {
+      // Hover then Enter, not a click: a menu ignores the mouse for a moment after it
+      // opens, so that releasing the right button cannot pick an item by accident.
+      await page
+        .locator('.context-view .monaco-menu .action-label')
+        .getByText(text, { exact: true })
+        .hover();
+      await page.keyboard.press('Enter');
+      await sleep(300);
+    },
+
+    /** Closes whatever menu, picker, or tooltip is open and parks the pointer off the tree. */
+    async dismiss() {
+      await page.keyboard.press('Escape');
+      await page.mouse.move(1000, 600);
+      await sleep(300);
+    },
+
+    /** Tooltips of the buttons in the view's title bar, left to right. */
+    titleActions: () =>
+      page.evaluate(
+        (selector) =>
+          [
+            // a view alone in its container puts its buttons in the container's title; a
+            // view sharing one keeps them in its own header. The Set covers a build that
+            // renders both.
+            ...new Set(
+              [
+                ...document.querySelectorAll(
+                  `${selector} .title-actions a.action-label, ${selector} .pane-header a.action-label`,
+                ),
+              ].map((action) => action.getAttribute('aria-label') ?? ''),
+            ),
+          ].filter(Boolean),
+        view,
+      ),
+
+    /** Text and button labels of the welcome content shown when the tree is empty. */
+    async welcome() {
+      const content = page.locator(`${view} .welcome-view-content`).first();
+      if (!(await content.isVisible())) return { text: '', buttons: [] };
+      return {
+        text: await content.innerText(),
+        buttons: await content.locator('.monaco-button').allInnerTexts(),
+      };
+    },
+
+    notifications: () => page.locator('.notification-list-item-message').allInnerTexts(),
+
+    /** Label and description of every row in the open quick pick. */
+    quickPickItems: () =>
+      page.evaluate(() =>
+        [
+          ...document.querySelectorAll('.quick-input-widget .quick-input-list .monaco-list-row'),
+        ].map((row) => ({
+          label: (row.querySelector('.label-name')?.textContent ?? '').trim(),
+          description: row.querySelector('.label-description')?.textContent ?? '',
+        })),
+      ),
+
+    /**
+     * Saves a screenshot for the report. The default frame is the sidebar plus room for a
+     * menu or tooltip beside it; `full` captures the whole window.
+     */
+    async shot(name, { full = false } = {}) {
+      const file = path.join(OUT, editorId, `${name}.png`);
+      await page.screenshot({
+        path: file,
+        clip: full ? undefined : { x: 0, y: 0, width: 660, height: 700 },
+      });
+      return file;
+    },
+  };
+  return ui;
+}
+
+async function launchEditor(playwright, editorId, profile) {
+  const app = await playwright._electron.launch({
+    executablePath: EDITORS[editorId].binary,
+    args: [
+      // cloud sessions run as root, and Chromium refuses to sandbox a root process
+      '--no-sandbox',
+      '--disable-gpu',
+      // 2x, so the screenshots stay sharp when a person reads them in a PR
+      '--force-device-scale-factor=2',
+      `--user-data-dir=${profile}`,
+      `--extensions-dir=${path.join(profile, 'extensions')}`,
+      `--extensionDevelopmentPath=${REPO}`,
+      '--skip-welcome',
+      '--skip-release-notes',
+      '--disable-workspace-trust',
+      '--disable-telemetry',
+      '--disable-updates',
+      path.join(HOME, CURRENT_REPO),
+    ],
+    // HOME moves "~" to the fixtures; the git variables keep the machine's own git
+    // config (signing, hooks, aliases) from changing what `git status` reports
+    env: { ...process.env, HOME, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
+    timeout: 120_000,
+  });
+  const page = await app.firstWindow({ timeout: 120_000 });
+  await page.waitForSelector('.monaco-workbench', { timeout: 120_000 });
+  const version = await app.evaluate(({ app: electronApp }) => electronApp.getVersion());
+  return { app, page, version };
+}
+
+async function runEditor(playwright, editorId, selected) {
+  const profile = path.join(E2E_DIR, 'profiles', editorId);
+  // a fresh profile per run: pins, recency, and settings from an earlier run would
+  // otherwise decide what this one sees
+  fs.rmSync(profile, { recursive: true, force: true });
+  fs.rmSync(path.join(OUT, editorId), { recursive: true, force: true });
+  fs.mkdirSync(path.join(OUT, editorId), { recursive: true });
+  await seedGlobalState(profile);
+
+  let ui = createUi(undefined, editorId, profile);
+  ui.setSettings();
+  const { app, page, version } = await launchEditor(playwright, editorId, profile);
+  ui = createUi(page, editorId, profile);
+  console.log(`\n${EDITORS[editorId].label} ${version}`);
+
+  const results = [];
+  try {
+    await sleep(3000);
+    await ui.command('RepoDock: Focus on Repositories View');
+    await ui.eventually(async () => {
+      assert.ok((await ui.rows()).length > 0, 'the RepoDock tree never rendered a row');
+    }, 60_000);
+
+    for (const scenario of selected) {
+      const started = Date.now();
+      const result = { id: scenario.id, kind: scenario.kind, title: scenario.title };
+      try {
+        await ui.dismiss();
+        ui.setSettings(scenario.settings);
+        await scenario.run(ui, assert);
+        result.status = 'pass';
+      } catch (error) {
+        result.status = 'fail';
+        result.error = error instanceof Error ? error.message : String(error);
+        await ui.shot(`${scenario.id}-FAILED`, { full: true }).catch(() => undefined);
+      }
+      result.ms = Date.now() - started;
+      console.log(
+        `  ${result.status === 'pass' ? 'pass' : 'FAIL'}  ${scenario.id}` +
+          (result.error ? `\n        ${result.error.split('\n')[0]}` : ''),
+      );
+      results.push(result);
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+  return { editor: EDITORS[editorId].label, version, results };
+}
+
+function writeReports(runs) {
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(runs, null, 2));
+  const mark = (run, id) => {
+    const result = run.results.find((candidate) => candidate.id === id);
+    return result ? (result.status === 'pass' ? 'pass' : '**FAIL**') : 'not run';
+  };
+  const ids = runs[0].results.map((result) => result.id);
+  const lines = [
+    `| Scenario | Kind | ${runs.map((run) => `${run.editor} ${run.version}`).join(' | ')} |`,
+    `| --- | --- | ${runs.map(() => '---').join(' | ')} |`,
+    ...ids.map((id) => {
+      const { kind } = runs[0].results.find((result) => result.id === id);
+      return `| \`${id}\` | ${kind} | ${runs.map((run) => mark(run, id)).join(' | ')} |`;
+    }),
+  ];
+  const failures = runs.flatMap((run) =>
+    run.results
+      .filter((result) => result.status === 'fail')
+      .map((result) => `- ${run.editor} \`${result.id}\`: ${result.error.split('\n')[0]}`),
+  );
+  if (failures.length > 0) lines.push('', 'Failures:', ...failures);
+  fs.writeFileSync(path.join(OUT, 'report.md'), `${lines.join('\n')}\n`);
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.list) {
+    for (const scenario of scenarios) {
+      console.log(`${scenario.id.padEnd(24)} ${scenario.kind.padEnd(7)} ${scenario.title}`);
+    }
+    return 0;
+  }
+
+  // The editors need a display. Cloud sessions have none, so the run restarts itself
+  // under a virtual one, sized for a 1440x900 window at the 2x scale factor.
+  if (!process.env.DISPLAY) {
+    const rerun = spawnSync(
+      'xvfb-run',
+      ['-a', '-s', '-screen 0 2880x1800x24', process.execPath, ...process.argv.slice(1)],
+      { stdio: 'inherit' },
+    );
+    return rerun.status ?? 1;
+  }
+
+  const editorIds = args.editor === 'both' ? ['vscode', 'vscodium'] : [args.editor];
+  checkPrerequisites(editorIds);
+  const selected = args.only
+    ? scenarios.filter((scenario) => args.only.includes(scenario.id))
+    : scenarios;
+  if (selected.length === 0) throw new Error('no scenario matches --only');
+
+  // always test the bundle built from the working tree, never a stale dist/
+  execFileSync('npm', ['run', 'build'], { cwd: REPO, stdio: 'ignore' });
+
+  const playwright = loadPlaywright();
+  fs.mkdirSync(OUT, { recursive: true });
+  const runs = [];
+  for (const editorId of editorIds) {
+    runs.push(await runEditor(playwright, editorId, selected));
+  }
+  writeReports(runs);
+
+  const failed = runs.flatMap((run) => run.results).filter((result) => result.status === 'fail');
+  console.log(`\n${failed.length === 0 ? 'All scenarios passed' : `${failed.length} failed`}.`);
+  console.log(`Report and screenshots: ${OUT}`);
+  return failed.length === 0 ? 0 : 1;
+}
+
+process.exitCode = await main();

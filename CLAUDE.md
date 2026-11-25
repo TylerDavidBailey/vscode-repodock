@@ -52,6 +52,10 @@ user-facing docs. This file covers what those docs leave out.
   the config listener to a rescan, and `contextValue` on a real tree. Command bodies belong
   in `test/unit/commands.test.ts`. Clear anything the suite writes to global settings in
   `after`, because runs share the user-data dir.
+- The `editor-test` skill (`.claude/skills/editor-test`) loads the working tree into a real
+  VS Code and a real VSCodium and checks scripted normal-case and edge-case scenarios. A PR
+  that changes what the user sees updates `scripts/scenarios.mjs` there and pastes the
+  report into its Testing section. It is Linux-only and runs in cloud sessions, not in CI.
 - `path.sep` is fixed when `node:path` loads, so overriding `process.platform` does not
   reach it. Windows separator behavior needs `node:path` mocked with its `win32` variant
   (`test/unit/sorting-windows.test.ts`). `canonicalPathKey`'s case folding reads
