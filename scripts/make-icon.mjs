@@ -15,8 +15,9 @@ const GRID = 128;
 const SCALE = SIZE / GRID;
 
 // One flat mid-tone, because the icon is shown on whatever theme the user runs: a dark tile
-// disappears into a dark theme and a light one into a light theme.
-const TILE_COLOR = [99, 102, 241]; // #6366f1
+// disappears into a dark theme and a light one into a light theme. The orange-red is the
+// color people already associate with git.
+const TILE_COLOR = [240, 80, 51]; // #f05033
 const GLYPH_COLOR = [255, 255, 255];
 
 // The "folder-git" icon from Lucide (https://lucide.dev/icons/folder-git), ISC License, with
