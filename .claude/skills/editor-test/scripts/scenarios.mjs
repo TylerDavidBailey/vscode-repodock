@@ -207,8 +207,10 @@ export const scenarios = [
     id: 'tooltip',
     kind: 'normal',
     title: 'The tooltip reports path, branch, changes, and upstream distance',
-    async run(ui, assert) {
-      await ui.eventually(async () => assert.ok(await find(ui, 'storefront')));
+    async run(ui, assert, P) {
+      // the whole tree first: a scenario before may have left another layout, and a row
+      // looked up mid-redraw is hovered at the index it no longer has
+      await ui.eventually(() => expectTree(ui, assert, FOLDER_TREE, P.rest));
       const { text } = await ui.tooltip('storefront');
       assert.match(text, /storefront — open in this window/);
       assert.match(text, /~\/projects\/web\/storefront/);
