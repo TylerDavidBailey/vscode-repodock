@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.2.0...v1.3.0) (2026-11-26)
+
+
+### Features
+
+* list pinned repos first and show each repo as a mark and a name ([#77](https://github.com/TylerDavidBailey/vscode-repodock/issues/77)) ([8c07110](https://github.com/TylerDavidBailey/vscode-repodock/commit/8c07110e9927699fca6db6718765d82f9508f5f9))
+
 ## [1.2.0](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.1.5...v1.2.0) (2026-11-25)
 
 
