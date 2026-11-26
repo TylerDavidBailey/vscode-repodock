@@ -10,6 +10,7 @@ import {
   getConfig,
   hideRepo,
   removeDirectory,
+  setLayout,
   tildify,
   unhideAllRepos,
 } from './settings';
@@ -50,7 +51,7 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
       return;
     }
     await recency.touch(repo.path);
-    // an open in a new window leaves this one showing, so its Recent section has to move
+    // an open in a new window leaves this one showing, so its recent order has to move
     rebuildViews();
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(repo.path), {
       forceNewWindow: forceNewWindow ?? getConfig().openInNewWindow,
@@ -104,6 +105,8 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
       }
     }),
     vscode.commands.registerCommand('repodock.refresh', () => refresh()),
+    vscode.commands.registerCommand('repodock.showFolders', () => setLayout('folders')),
+    vscode.commands.registerCommand('repodock.showRecent', () => setLayout('recent')),
     vscode.commands.registerCommand(
       'repodock.openInTerminal',
       withRepo((repo) => {

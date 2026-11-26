@@ -9,9 +9,9 @@ import {
   formatRelativeTime,
   groupReposByRoot,
   pinnedRepos,
-  recentRepos,
   repoLabels,
   sameRepoList,
+  sortByRecency,
 } from '../../src/core/sorting';
 import type { RepoInfo } from '../../src/core/types';
 
@@ -277,7 +277,7 @@ describe('pinnedRepos', () => {
   });
 });
 
-describe('recentRepos', () => {
+describe('sortByRecency', () => {
   const repos = [makeRepo('gamma'), makeRepo('alpha'), makeRepo('sub/beta'), makeRepo('never')];
   const names = (list: RepoInfo[]) => list.map((repo) => repo.name);
   const recency = new Map([
@@ -286,21 +286,24 @@ describe('recentRepos', () => {
     [`${ROOT}/gamma`, 2000],
   ]);
 
-  it('orders by last opened, newest first, and leaves out repos never opened', () => {
-    expect(names(recentRepos(repos, recency, 10))).toEqual(['beta', 'gamma', 'alpha']);
+  it('orders by last opened, newest first, then lists the never-opened repos by name', () => {
+    const more = [...repos, makeRepo('another')];
+    expect(names(sortByRecency(more, recency))).toEqual([
+      'beta',
+      'gamma',
+      'alpha',
+      'another',
+      'never',
+    ]);
   });
 
-  it('stops at the limit, keeping the newest', () => {
-    expect(names(recentRepos(repos, recency, 2))).toEqual(['beta', 'gamma']);
-    expect(names(recentRepos(repos, recency, 1))).toEqual(['beta']);
-  });
-
-  it('is empty when nothing has been opened', () => {
-    expect(recentRepos(repos, new Map(), 10)).toEqual([]);
+  it('lists everything by name when nothing has been opened', () => {
+    expect(names(sortByRecency(repos, new Map()))).toEqual(['alpha', 'beta', 'gamma', 'never']);
   });
 
   it('ignores a timestamp whose repo is no longer in the list', () => {
-    expect(recentRepos(repos, new Map([[`${ROOT}/gone`, 5000]]), 10)).toEqual([]);
+    const stale = new Map([[`${ROOT}/gone`, 5000]]);
+    expect(names(sortByRecency(repos, stale))).toEqual(['alpha', 'beta', 'gamma', 'never']);
   });
 
   it('breaks a tie in open time by name', () => {
@@ -308,16 +311,17 @@ describe('recentRepos', () => {
       [`${ROOT}/gamma`, 1000],
       [`${ROOT}/alpha`, 1000],
     ]);
-    expect(names(recentRepos(repos, tied, 10))).toEqual(['alpha', 'gamma']);
+    expect(names(sortByRecency(repos, tied))).toEqual(['alpha', 'gamma', 'beta', 'never']);
   });
 
-  it('lists a repo opened at timestamp zero, which is a time and not a missing one', () => {
-    expect(names(recentRepos(repos, new Map([[`${ROOT}/alpha`, 0]]), 10))).toEqual(['alpha']);
+  it('puts a repo opened at timestamp zero ahead of one never opened', () => {
+    const zero = new Map([[`${ROOT}/never`, 0]]);
+    expect(names(sortByRecency(repos, zero))).toEqual(['never', 'alpha', 'beta', 'gamma']);
   });
 
   it('leaves the list it was given untouched', () => {
     const before = names(repos);
-    recentRepos(repos, recency, 10);
+    sortByRecency(repos, recency);
     expect(names(repos)).toEqual(before);
   });
 
@@ -333,7 +337,11 @@ describe('recentRepos', () => {
       });
       const list = [win('alpha'), win('beta'), win('gamma')];
       expect(names(pinnedRepos(list, new Set(['c:\\repos\\gamma'])))).toEqual(['gamma']);
-      expect(names(recentRepos(list, new Map([['c:\\repos\\beta', 2000]]), 10))).toEqual(['beta']);
+      expect(names(sortByRecency(list, new Map([['c:\\repos\\beta', 2000]])))).toEqual([
+        'beta',
+        'alpha',
+        'gamma',
+      ]);
     } finally {
       if (platform) Object.defineProperty(process, 'platform', platform);
     }

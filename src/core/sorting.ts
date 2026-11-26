@@ -11,7 +11,7 @@ function parentContext(repo: RepoInfo, levels: number): string {
 }
 
 /**
- * Labels for repos listed side by side in a flat section, keyed by repo path. A repo is
+ * Labels for repos listed side by side in a flat list, keyed by repo path. A repo is
  * labelled by its bare name. Only repos that share a name get the directories above them
  * spelled out, as many levels as it takes to differ ("web-app (work)" and
  * "web-app (personal)"), because a folder on every row costs the width the branch needs.
@@ -58,20 +58,20 @@ export function pinnedRepos(repos: readonly RepoInfo[], pinned: ReadonlySet<stri
 }
 
 /**
- * The most recently opened repos among `repos`, newest first and at most `limit` of them.
- * A repo that was never opened is left out however short the list is, so the section
- * reports history rather than padding itself. `recency` is keyed by canonical path key.
+ * `repos` newest-opened first. Repos that were never opened follow, in name order, so a
+ * fresh install still lists everything. `recency` is keyed by canonical path key.
  */
-export function recentRepos(
+export function sortByRecency(
   repos: readonly RepoInfo[],
   recency: ReadonlyMap<string, number>,
-  limit: number,
 ): RepoInfo[] {
-  const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path));
-  return repos
-    .filter((repo) => openedAt(repo) !== undefined)
-    .sort((a, b) => (openedAt(b) ?? 0) - (openedAt(a) ?? 0) || compareByName(a, b))
-    .slice(0, limit);
+  const openedAt = (repo: RepoInfo) => recency.get(canonicalPathKey(repo.path)) ?? -Infinity;
+  return repos.slice().sort((a, b) => {
+    // compared rather than subtracted: two never-opened repos would give -Infinity - -Infinity
+    const [aOpened, bOpened] = [openedAt(a), openedAt(b)];
+    if (aOpened !== bOpened) return bOpened > aOpened ? 1 : -1;
+    return compareByName(a, b);
+  });
 }
 
 /**

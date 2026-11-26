@@ -71,7 +71,7 @@ changes what the user sees is not tested until the catalog says what the new beh
 - **A scenario that changes the window** (opens a folder, reloads) goes at the end of the
   catalog beside `open-repo`, because the others assume the window they were launched with.
 - **Changed sidebar:** refresh the README screenshots. They are crops of the VS Code
-  run's `sections`, `tooltip`, `context-menu`, and `light-theme` shots, saved as
+  run's `sidebar`, `tooltip`, `context-menu`, and `light-theme` shots, saved as
   `docs/screenshot.png`, `docs/screenshot-tooltip.png`, `docs/screenshot-menu.png`, and
   `docs/screenshot-light.png`. The fixture names are invented on purpose, so the README
   never shows a repository from a real machine.
@@ -82,9 +82,9 @@ Scenario style, so the catalog stays uniform:
 - `title` is one sentence stating the expected behavior. It is what the report shows.
 - Wrap every assertion about the UI in `ui.eventually`. Scans, git loads, and settings
   reloads all land asynchronously.
-- Read rows with `ui.rows(section)`, which returns the rows under one section heading
-  with levels counted from that heading, or `ui.tree()` for every row. `ui.row()` is
-  async: it finds the row in the tree as it is at that moment.
+- Read rows with `ui.rows(part)`: `P.pinned` is the rows above the blank gap row, `P.rest`
+  the rows below it, and no part is the whole tree. `ui.gap()` finds the gap row. `ui.row()`
+  is async: it finds the row in the tree as it is at that moment.
 - Assert exact text with `assert.deepEqual` or `assert.equal` where the text is fixed, and
   a regular expression only where it legitimately varies (hashes, relative times).
 - Put per-scenario configuration in `settings`. The runner resets to the base settings
@@ -100,9 +100,9 @@ the gates. The table already names both editor versions:
 ```markdown
 Gates: lint, typecheck, coverage, and integration all pass.
 
-| Scenario   | Kind   | VS Code 1.148.0 | VSCodium 1.143.17232 |
-| ---------- | ------ | --------------- | -------------------- |
-| `sections` | normal | pass            | pass                 |
+| Scenario  | Kind   | VS Code 1.148.0 | VSCodium 1.143.17232 |
+| --------- | ------ | --------------- | -------------------- |
+| `sidebar` | normal | pass            | pass                 |
 ```
 
 Then add one line on what the screenshots showed for the surfaces the PR changed. If a

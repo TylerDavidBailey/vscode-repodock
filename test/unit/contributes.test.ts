@@ -14,7 +14,7 @@ import contributes from '../../package.json';
 import { fakeExtensionContext } from './helpers/extensionContext';
 import { absPath, makeRepo } from './helpers/repoFixture';
 import { required } from './helpers/required';
-import { createProvider } from './helpers/sections';
+import { createProvider } from './helpers/provider';
 import { stubState as state } from './helpers/vscodeStub';
 
 /**
@@ -226,7 +226,7 @@ describe('configuration defaults', () => {
     expect(config.exclude).toEqual(defaults['repodock.exclude'].default);
     expect(config.hiddenRepos).toEqual(defaults['repodock.hiddenRepos'].default);
     expect(config.showNestedRepos).toBe(defaults['repodock.showNestedRepos'].default);
-    expect(config.recentCount).toBe(defaults['repodock.recentCount'].default);
+    expect(config.layout).toBe(defaults['repodock.layout'].default);
     expect(config.openInNewWindow).toBe(defaults['repodock.openInNewWindow'].default);
   });
 
@@ -238,12 +238,37 @@ describe('configuration defaults', () => {
     );
   });
 
-  it('declares the range getConfig clamps recentCount to', () => {
-    const schema = configuration.properties['repodock.recentCount'];
-    state.config.set('recentCount', schema.minimum - 1);
-    expect(getConfig().recentCount).toBe(schema.minimum);
-    state.config.set('recentCount', schema.maximum + 1);
-    expect(getConfig().recentCount).toBe(schema.maximum);
+  it('declares exactly the layouts getConfig reads', () => {
+    const schema = configuration.properties['repodock.layout'];
+    for (const layout of schema.enum) {
+      state.config.set('layout', layout);
+      expect(getConfig().layout).toBe(layout);
+    }
+  });
+});
+
+describe('the layout toggle', () => {
+  const toggles = () =>
+    menus['view/title'].filter((entry) => entry.when.includes('repodock.layout'));
+
+  it('shows one button per layout, which switches to the other layout', async () => {
+    const context = fakeExtensionContext();
+    registerCommands(context, {
+      ...createProvider(),
+      refresh: () => Promise.resolve(),
+      rebuildViews: () => undefined,
+    });
+    const layouts = configuration.properties['repodock.layout'].enum;
+    for (const layout of layouts) {
+      const shown = toggles().filter((entry) =>
+        entry.when.endsWith(`repodock.layout == ${layout}`),
+      );
+      expect(shown, `buttons while the layout is ${layout}`).toHaveLength(1);
+      const command = required(shown[0], 'a toggle').command;
+      await required(state.commands.get(command), `a handler for ${command}`)();
+      expect(state.config.get('layout'), command).not.toBe(layout);
+      expect(layouts).toContain(state.config.get('layout'));
+    }
   });
 });
 

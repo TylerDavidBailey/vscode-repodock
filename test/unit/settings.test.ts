@@ -7,6 +7,7 @@ import {
   getConfig,
   hideRepo,
   removeDirectory,
+  setLayout,
   tildify,
   unhideAllRepos,
 } from '../../src/ext/settings';
@@ -91,7 +92,7 @@ describe('getConfig', () => {
     expect(config.directories).toEqual([]);
     expect(config.maxDepth).toBe(4);
     expect(config.exclude).toContain('node_modules');
-    expect(config.recentCount).toBe(10);
+    expect(config.layout).toBe('folders');
     expect(config.showNestedRepos).toBe(true);
     expect(config.openInNewWindow).toBe(false);
   });
@@ -174,26 +175,11 @@ describe('getConfig with malformed settings', () => {
     expect(getConfig().maxDepth).toBe(expected);
   });
 
-  // VS Code shows the schema's range in the settings editor but hands over whatever
-  // settings.json holds, and a count of 0 would leave Recent permanently empty
-  it.each([
-    [0, 1],
-    [-3, 1],
-    [1, 1],
-    [7.9, 7],
-    [50, 50],
-    [51, 50],
-    [1e9, 50],
-  ])('holds a recentCount of %j to %j', (value, expected) => {
-    configStore.set('recentCount', value);
-    expect(getConfig().recentCount).toBe(expected);
-  });
-
-  it.each(['12', null, true, [5], Number.NaN, Number.POSITIVE_INFINITY])(
-    'reads a recentCount of %j as the default',
+  it.each(['Recent', 'tree', '', null, 1, ['recent']])(
+    'reads a layout of %j as the folder layout',
     (value) => {
-      configStore.set('recentCount', value);
-      expect(getConfig().recentCount).toBe(10);
+      configStore.set('layout', value);
+      expect(getConfig().layout).toBe('folders');
     },
   );
 
@@ -241,8 +227,8 @@ describe('Restricted Mode', () => {
 
   it('keeps a workspace value for a setting that only changes presentation', () => {
     state.workspaceTrusted = false;
-    state.workspaceConfig.set('recentCount', 3);
-    expect(getConfig().recentCount).toBe(3);
+    state.workspaceConfig.set('layout', 'recent');
+    expect(getConfig().layout).toBe('recent');
   });
 });
 
@@ -404,6 +390,22 @@ describe('writing where the workspace supplies the value', () => {
     ]);
     expect(configStore.has('hiddenRepos')).toBe(false);
     expect(getConfig().hiddenRepos).toContain(path.join(home, 'code', 'alpha'));
+  });
+});
+
+describe('setLayout', () => {
+  it('writes the global setting when nothing else holds one', async () => {
+    await setLayout('recent');
+    expect(configStore.get('layout')).toBe('recent');
+    expect(getConfig().layout).toBe('recent');
+  });
+
+  it('writes the workspace setting when that is the one in effect, Restricted Mode or not', async () => {
+    state.workspaceTrusted = false;
+    state.workspaceConfig.set('layout', 'recent');
+    await setLayout('folders');
+    expect(state.workspaceConfig.get('layout')).toBe('folders');
+    expect(configStore.has('layout')).toBe(false);
   });
 });
 

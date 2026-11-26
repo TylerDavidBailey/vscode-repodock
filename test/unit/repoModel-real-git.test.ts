@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('vscode', async () => (await import('./helpers/vscodeStub.js')).createVscodeStub());
 
 import { RepoModel } from '../../src/ext/repoModel';
-import { createProvider, sectionRows } from './helpers/sections';
+import { createProvider } from './helpers/provider';
 import { withGitRepos, type GitFixture } from './helpers/repoFixture';
 import { stubState as state } from './helpers/vscodeStub';
 
@@ -37,7 +37,7 @@ describe('RepoModel against real repositories', () => {
     expect(new Set(paths).size).toBe(2);
     expect(model.getGitStates().get(fixture.repo('alpha'))?.branch).toBe('main');
     // each root keeps the repos nearest to it, so beta sits under the inner folder only
-    const [outer, inner] = sectionRows(provider, 'all');
+    const [outer, inner] = provider.getChildren();
     expect(outer?.children.map((row) => row.label)).toEqual(['alpha']);
     expect(inner?.children.map((row) => row.label)).toEqual(['beta']);
   });

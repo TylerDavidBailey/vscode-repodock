@@ -57,7 +57,7 @@ export class RepoModel implements vscode.Disposable {
     return this.gitStates;
   }
 
-  /** Marks the repos open in this window so the views can highlight them. */
+  /** Marks the repos open in this window, which their tooltips report. */
   setCurrentRepos(paths: string[]): void {
     this.currentRepos = new Set(paths.map(canonicalPathKey));
   }

@@ -7,10 +7,10 @@ vi.mock('../../src/core/git', () => ({ loadGitStates: vi.fn() }));
 import { loadGitStates } from '../../src/core/git';
 import { scanForRepos } from '../../src/core/scanner';
 import type { GitState, RepoInfo } from '../../src/core/types';
-import type { RepoTreeProvider, Section, TreeNode } from '../../src/ext/treeProvider';
+import type { RepoTreeProvider, TreeNode } from '../../src/ext/treeProvider';
 import { absPath, makeGitState, makeRepo } from './helpers/repoFixture';
 import { required } from './helpers/required';
-import { createProvider, labelOf, outline, sectionRows, type Rendered } from './helpers/sections';
+import { createProvider, labelOf, outline, type Rendered } from './helpers/provider';
 import { stubState as state } from './helpers/vscodeStub';
 
 const CODE = absPath('/srv/code');
@@ -44,16 +44,9 @@ async function render(
   return rendered;
 }
 
-/** The labels of the rows directly under a section heading. */
-const labels = (provider: RepoTreeProvider, section: Section) =>
-  sectionRows(provider, section).map((row) => row.label);
-
-/** The top-level rows as "label count", which is how each section heading reads. */
-const headings = (provider: RepoTreeProvider) =>
-  provider.getChildren().map((node) => {
-    const item = provider.getTreeItem(node);
-    return `${labelOf(provider, node)} ${String(item.description)}`;
-  });
+/** The top-level rows' labels, from a fresh render. The gap row reads as ''. */
+const topLabels = (provider: RepoTreeProvider) =>
+  provider.getChildren().map((node) => labelOf(provider, node));
 
 /** Opens `repos` one second apart, so the last one is the most recent. */
 async function openInOrder(recency: Rendered['recency'], repos: RepoInfo[]): Promise<void> {
@@ -73,129 +66,15 @@ beforeEach(() => {
   state.config.set('directories', [CODE, WORK]);
 });
 
-describe('the section headings', () => {
-  it('are absent while there is nothing to list, which leaves the welcome text showing', async () => {
+describe('the folder layout', () => {
+  it('lists nothing while there is nothing to list, which leaves the welcome text showing', async () => {
     const { provider } = await render([]);
     expect(provider.getChildren()).toEqual([]);
   });
 
-  it('show only All Repositories until something is pinned or opened', async () => {
-    const { provider } = await render();
-    expect(headings(provider)).toEqual(['All Repositories 6']);
-  });
-
-  it('appear in the order Pinned, Recent, All Repositories, each with its count', async () => {
-    const { provider, pins, recency } = await render();
-    await pins.pin(api.path);
-    await openInOrder(recency, [web, portal]);
-    expect(headings(provider)).toEqual(['Pinned 1', 'Recent 2', 'All Repositories 6']);
-  });
-
-  it('start expanded, carry a stable id, and stay out of the repo menus', async () => {
-    const { provider, pins } = await render();
-    await pins.pin(api.path);
-    const [pinned, all] = provider.getChildren();
-    const item = provider.getTreeItem(required(pinned, 'the Pinned heading'));
-    expect(item.id).toBe('section:pinned');
-    expect(item.collapsibleState).toBe(2); // Expanded
-    // headings deliberately carry no contextValue, so the /^repo/ menus skip them
-    expect(item.contextValue).toBeUndefined();
-    expect(item.command).toBeUndefined();
-    expect(provider.getTreeItem(required(all, 'the All heading')).id).toBe('section:all');
-  });
-
-  it('come and go as the last repo leaves a section or the first one enters it', async () => {
-    const { provider, pins } = await render();
-    await pins.pin(api.path);
-    expect(headings(provider)).toContain('Pinned 1');
-    await pins.unpin(api.path);
-    expect(headings(provider)).toEqual(['All Repositories 6']);
-  });
-});
-
-describe('the Pinned section', () => {
-  it('lists pinned repos by name, wherever they live', async () => {
-    const { provider, pins } = await render();
-    await pins.pin(portal.path);
-    await pins.pin(api.path);
-    expect(labels(provider, 'pinned')).toEqual(['api', 'portal']);
-  });
-
-  it('is a flat list: a pinned repo shows no nested repos under it', async () => {
-    const { provider, pins } = await render();
-    await pins.pin(gateway.path);
-    const [row] = sectionRows(provider, 'pinned');
-    expect(provider.getChildren(required(row, 'a pinned row'))).toEqual([]);
-    expect(provider.getTreeItem(required(row, 'a pinned row')).collapsibleState).toBe(0);
-  });
-
-  it('drops a pin whose repo has been hidden, and brings it back when unhidden', async () => {
-    const { provider, pins, model } = await render();
-    await pins.pin(api.path);
-    state.config.set('hiddenRepos', [api.path]);
-    await model.refresh();
-    expect(labels(provider, 'pinned')).toEqual([]);
-
-    state.config.set('hiddenRepos', []);
-    await model.refresh();
-    expect(labels(provider, 'pinned')).toEqual(['api']);
-  });
-
-  it('drops a pinned nested repo while nested repos are turned off', async () => {
-    const { provider, pins } = await render();
-    await pins.pin(sdk.path);
-    expect(labels(provider, 'pinned')).toEqual(['sdk']);
-    state.config.set('showNestedRepos', false);
-    expect(labels(provider, 'pinned')).toEqual([]);
-  });
-});
-
-describe('the Recent section', () => {
-  it('lists opened repos newest first, and nothing that was never opened', async () => {
-    const { provider, recency } = await render();
-    await openInOrder(recency, [dotfiles, web, portal]);
-    expect(labels(provider, 'recent')).toEqual(['portal', 'web', 'dotfiles']);
-  });
-
-  it('stops at recentCount, and follows the setting', async () => {
-    const { provider, recency } = await render();
-    await openInOrder(recency, [dotfiles, web, portal, api]);
-    state.config.set('recentCount', 2);
-    expect(labels(provider, 'recent')).toEqual(['api', 'portal']);
-    expect(headings(provider)).toContain('Recent 2');
-    state.config.set('recentCount', 3);
-    expect(labels(provider, 'recent')).toEqual(['api', 'portal', 'web']);
-  });
-
-  it('lists a pinned repo too, since it reports what was opened', async () => {
-    const { provider, recency, pins } = await render();
-    await pins.pin(api.path);
-    await recency.touch(api.path);
-    expect(labels(provider, 'recent')).toEqual(['api']);
-  });
-
-  it('forgets a repo that is no longer scanned, without losing its place in history', async () => {
-    const { provider, recency, model } = await render();
-    await recency.touch(web.path);
-    vi.mocked(scanForRepos).mockResolvedValue([]);
-    await model.refresh();
-    expect(labels(provider, 'recent')).toEqual([]);
-
-    // the folder comes back (a drive remounts): the row returns without being reopened
-    vi.mocked(scanForRepos).mockImplementation((root) =>
-      Promise.resolve(root === CODE ? [{ ...web }] : []),
-    );
-    await model.refresh();
-    expect(labels(provider, 'recent')).toEqual(['web']);
-  });
-});
-
-describe('the All Repositories section', () => {
-  const tree = (provider: RepoTreeProvider) => outline(provider, sectionRows(provider, 'all'));
-
   it('mirrors the disk: scan folder, folders, repos, with nested repos under their parent', async () => {
     const { provider } = await render();
-    expect(tree(provider)).toEqual([
+    expect(outline(provider)).toEqual([
       CODE,
       '  frontend',
       '    web',
@@ -211,7 +90,7 @@ describe('the All Repositories section', () => {
 
   it('drops the scan-folder row when only one folder holds repos', async () => {
     const { provider } = await render([web, dotfiles]);
-    expect(tree(provider)).toEqual(['frontend', '  web', 'dotfiles']);
+    expect(outline(provider)).toEqual(['frontend', '  web', 'dotfiles']);
   });
 
   it('lists a repo once when overlapping folders both find it, under the nearer one', async () => {
@@ -219,19 +98,18 @@ describe('the All Repositories section', () => {
     state.config.set('directories', [CODE, services]);
     const apiViaServices = makeRepo({ path: api.path, root: services });
     const { provider } = await render([web, api, apiViaServices]);
-    expect(tree(provider)).toEqual([CODE, '  frontend', '    web', services, '  api']);
-    expect(headings(provider)).toEqual(['All Repositories 2']);
+    expect(outline(provider)).toEqual([CODE, '  frontend', '    web', services, '  api']);
   });
 
   it('hides nested repos, and the twistie that led to them, when showNestedRepos is off', async () => {
     state.config.set('showNestedRepos', false);
     const { provider } = await render();
-    expect(tree(provider)).not.toContain('      vendor/sdk');
+    expect(outline(provider)).not.toContain('      vendor/sdk');
     const row = required(provider.findRepoElement(gateway.path), 'a row for gateway');
     expect(provider.getTreeItem(row).collapsibleState).toBe(0);
   });
 
-  it('reports each row parent, up to the section heading', async () => {
+  it('reports each row parent, up to the top', async () => {
     const { provider } = await render();
     const chain: string[] = [];
     let node: TreeNode | undefined = provider.findRepoElement(sdk.path);
@@ -239,89 +117,177 @@ describe('the All Repositories section', () => {
       chain.push(labelOf(provider, node));
       node = provider.getParent(node);
     }
-    expect(chain).toEqual(['vendor/sdk', 'gateway', 'services', CODE, 'All Repositories']);
+    expect(chain).toEqual(['vendor/sdk', 'gateway', 'services', CODE]);
   });
 
-  it('reports no parent for a section heading', async () => {
-    const { provider } = await render();
-    const [heading] = provider.getChildren();
-    expect(provider.getParent(required(heading, 'a heading'))).toBeUndefined();
+  it('keeps the bare name of same-named repos, since the folders above them already tell', async () => {
+    const workWeb = makeRepo({ path: '/srv/work/web', root: WORK });
+    const { provider } = await render([web, workWeb]);
+    expect(outline(provider)).toEqual([CODE, '  frontend', '    web', WORK, '  web']);
   });
 });
 
-describe('a repo listed in more than one section', () => {
-  it('gets a row in each, with ids that cannot collide in the one tree', async () => {
-    const { provider, pins, recency } = await render();
-    await pins.pin(api.path);
+describe('the recent layout', () => {
+  beforeEach(() => {
+    state.config.set('layout', 'recent');
+  });
+
+  it('lists every repo flat, newest-opened first, then the rest by name', async () => {
+    const { provider, recency } = await render();
+    await openInOrder(recency, [dotfiles, web, portal]);
+    expect(outline(provider)).toEqual(['portal', 'web', 'dotfiles', 'api', 'gateway', 'sdk']);
+  });
+
+  it('lists everything by name before anything has been opened', async () => {
+    const { provider } = await render();
+    expect(topLabels(provider)).toEqual(['api', 'dotfiles', 'gateway', 'portal', 'sdk', 'web']);
+  });
+
+  it('follows the setting back to folders without a rescan', async () => {
+    const { provider } = await render([web, dotfiles]);
+    expect(topLabels(provider)).toEqual(['dotfiles', 'web']);
+    state.config.set('layout', 'folders');
+    expect(outline(provider)).toEqual(['frontend', '  web', 'dotfiles']);
+  });
+
+  it('tells same-named repos apart by folder', async () => {
+    const workWeb = makeRepo({ path: '/srv/work/web', root: WORK });
+    const { provider } = await render([web, workWeb, api]);
+    expect(topLabels(provider)).toEqual(['api', 'web (frontend)', 'web (work)']);
+  });
+
+  it('drops a repo that is no longer scanned, and brings it back in place when it returns', async () => {
+    const { provider, recency, model } = await render([web, api]);
     await recency.touch(api.path);
+    vi.mocked(scanForRepos).mockResolvedValue([]);
+    await model.refresh();
+    expect(topLabels(provider)).toEqual([]);
 
-    const ids = (['pinned', 'recent', 'all'] as const).map((section) => {
-      const row = required(provider.findRepoElement(api.path, section), `a ${section} row`);
-      return provider.getTreeItem(row).id;
-    });
-    expect(ids).toEqual([`pinned:${api.path}`, `recent:${api.path}`, `all:${api.path}`]);
+    // the folder comes back (a drive remounts): the row returns without being reopened
+    vi.mocked(scanForRepos).mockImplementation((root) =>
+      Promise.resolve(root === CODE ? [{ ...web }, { ...api }] : []),
+    );
+    await model.refresh();
+    expect(topLabels(provider)).toEqual(['api', 'web']);
+  });
+});
+
+describe('pinned repos', () => {
+  it('lead the list by name, wherever they live, with a gap before the rest', async () => {
+    const { provider, pins } = await render([web, api, portal]);
+    await pins.pin(portal.path);
+    await pins.pin(api.path);
+    expect(outline(provider)).toEqual(['api', 'portal', '', 'frontend', '  web']);
   });
 
-  it('gives every row in the tree a distinct id', async () => {
-    const { provider, pins, recency } = await render();
-    for (const repo of EVERYTHING) {
-      await pins.pin(repo.path);
-      await recency.touch(repo.path);
-    }
-    const ids: string[] = [];
-    const collect = (nodes: TreeNode[]): void => {
-      for (const node of nodes) {
-        ids.push(String(provider.getTreeItem(node).id));
-        collect(provider.getChildren(node));
-      }
-    };
-    collect(provider.getChildren());
-    expect(ids.length).toBeGreaterThan(EVERYTHING.length * 3);
-    expect(new Set(ids).size).toBe(ids.length);
+  it('lead the recent layout too, ahead of a repo opened more recently', async () => {
+    state.config.set('layout', 'recent');
+    const { provider, pins, recency } = await render([web, api, portal]);
+    await pins.pin(api.path);
+    await openInOrder(recency, [api, web]);
+    expect(topLabels(provider)).toEqual(['api', '', 'web', 'portal']);
   });
 
-  it('hands each row its own element, so a command knows which row it came from', async () => {
+  it('move rather than copy: a pinned repo has one row', async () => {
     const { provider, pins } = await render();
     await pins.pin(api.path);
-    const pinned = provider.findRepoElement(api.path, 'pinned');
-    const all = provider.findRepoElement(api.path, 'all');
-    expect(pinned).toBeDefined();
-    expect(pinned).not.toBe(all);
-    expect(pinned?.repo.path).toBe(all?.repo.path);
+    expect(outline(provider).filter((label) => label.trim() === 'api')).toEqual(['api']);
+  });
+
+  it('take no gap when nothing else is left to list', async () => {
+    const { provider, pins } = await render([web]);
+    await pins.pin(web.path);
+    expect(outline(provider)).toEqual(['web']);
+  });
+
+  it('show no nested repos under them; those stay below, placed by their folders', async () => {
+    const { provider, pins } = await render([gateway, sdk]);
+    await pins.pin(gateway.path);
+    const [row] = provider.getChildren();
+    expect(provider.getChildren(required(row, 'a pinned row'))).toEqual([]);
+    expect(provider.getTreeItem(required(row, 'a pinned row')).collapsibleState).toBe(0);
+    expect(outline(provider)).toEqual(['gateway', '', 'services/gateway/vendor', '  sdk']);
+  });
+
+  it('are told apart by folder when two share a name', async () => {
+    const workWeb = makeRepo({ path: '/srv/work/web', root: WORK });
+    const { provider, pins } = await render([web, workWeb, api]);
+    for (const repo of [web, workWeb, api]) await pins.pin(repo.path);
+    expect(topLabels(provider)).toEqual(['api', 'web (frontend)', 'web (work)']);
+  });
+
+  it('drop a pin whose repo has been hidden, and bring it back when unhidden', async () => {
+    const { provider, pins, model } = await render([web, api]);
+    await pins.pin(api.path);
+    state.config.set('hiddenRepos', [api.path]);
+    await model.refresh();
+    expect(outline(provider)).toEqual(['frontend', '  web']);
+
+    state.config.set('hiddenRepos', []);
+    await model.refresh();
+    expect(outline(provider)).toEqual(['api', '', 'frontend', '  web']);
+  });
+
+  it('drop a pinned nested repo while nested repos are turned off', async () => {
+    const { provider, pins } = await render([gateway, sdk]);
+    await pins.pin(sdk.path);
+    expect(topLabels(provider)[0]).toBe('sdk');
+    state.config.set('showNestedRepos', false);
+    expect(outline(provider)).toEqual(['services', '  gateway']);
   });
 });
 
-describe('same-named repos', () => {
-  const workWeb = makeRepo({ path: '/srv/work/web', root: WORK });
+describe('the gap row', () => {
+  it('is blank, unclickable, out of the repo menus, and named for screen readers', async () => {
+    const { provider, pins } = await render([web, api]);
+    await pins.pin(api.path);
+    const gap = required(provider.getChildren()[1], 'the gap row');
+    expect(gap.kind).toBe('gap');
+    const item = provider.getTreeItem(gap);
+    expect(item.label).toBe('');
+    expect(item.id).toBe('gap');
+    expect(item.collapsibleState).toBe(0);
+    expect(item.command).toBeUndefined();
+    expect(item.contextValue).toBeUndefined();
+    expect(item.accessibilityInformation?.label).toBe('End of pinned repositories');
+    expect(provider.getChildren(gap)).toEqual([]);
+  });
+});
 
-  it('are told apart by folder in the flat sections', async () => {
-    const { provider, pins } = await render([web, workWeb, api]);
-    for (const repo of [web, workWeb, api]) await pins.pin(repo.path);
-    expect(labels(provider, 'pinned')).toEqual(['api', 'web (frontend)', 'web (work)']);
+describe('row ids', () => {
+  it('differ between a pinned row and the row the repo has otherwise', async () => {
+    const { provider, pins } = await render();
+    const before = provider.getTreeItem(required(provider.findRepoElement(api.path), 'api')).id;
+    await pins.pin(api.path);
+    provider.getChildren(); // the redraw VS Code asks for after a pin
+    const after = provider.getTreeItem(required(provider.findRepoElement(api.path), 'api')).id;
+    expect(before).toBe(`repo:${api.path}`);
+    expect(after).toBe(`pinned:${api.path}`);
   });
 
-  it('keep the bare name when only one of them is in the section', async () => {
-    const { provider, pins } = await render([web, workWeb]);
-    await pins.pin(web.path);
-    expect(labels(provider, 'pinned')).toEqual(['web']);
-  });
-
-  it('keep the bare name in All Repositories, where the folders above already tell', async () => {
-    const { provider } = await render([web, workWeb]);
-    expect(outline(provider, sectionRows(provider, 'all'))).toEqual([
-      CODE,
-      '  frontend',
-      '    web',
-      WORK,
-      '  web',
-    ]);
+  it('are distinct across the whole tree, in either layout', async () => {
+    for (const layout of ['folders', 'recent']) {
+      state.config.set('layout', layout);
+      const { provider, pins } = await render();
+      await pins.pin(api.path);
+      await pins.pin(sdk.path);
+      const ids: string[] = [];
+      const collect = (nodes: TreeNode[]): void => {
+        for (const node of nodes) {
+          ids.push(String(provider.getTreeItem(node).id));
+          collect(provider.getChildren(node));
+        }
+      };
+      collect(provider.getChildren());
+      expect(new Set(ids).size, layout).toBe(ids.length);
+    }
   });
 });
 
 describe('findRepoElement', () => {
   it('returns the same instance the tree handed out', async () => {
     const { provider } = await render([dotfiles]);
-    const [row] = sectionRows(provider, 'all');
+    const [row] = provider.getChildren();
     expect(provider.findRepoElement(dotfiles.path)).toBe(row);
   });
 
@@ -330,11 +296,11 @@ describe('findRepoElement', () => {
     expect(provider.findRepoElement(sdk.path)?.label).toBe('vendor/sdk');
   });
 
-  it('looks in All Repositories unless told otherwise, and answers per section', async () => {
-    const { provider } = await render();
-    expect(provider.findRepoElement(web.path)).toBeDefined();
-    expect(provider.findRepoElement(web.path, 'pinned')).toBeUndefined();
-    expect(provider.findRepoElement(web.path, 'recent')).toBeUndefined();
+  it('finds a pinned repo at the top', async () => {
+    const { provider, pins } = await render();
+    await pins.pin(web.path);
+    const [top] = provider.getChildren();
+    expect(provider.findRepoElement(web.path)).toBe(top);
   });
 
   it('returns undefined for a path that was never scanned', async () => {
@@ -363,7 +329,7 @@ describe('re-rendering', () => {
     expect(events).toContain('all');
   });
 
-  it('redraws each row of a repo whose git state was reloaded, in every section listing it', async () => {
+  it('redraws the row of each repo whose git state was reloaded', async () => {
     const { provider, model, pins } = await render([web, api], { [web.path]: makeGitState() });
     await pins.pin(web.path);
     // VS Code asks the view for its rows after a full redraw; a row that was never
@@ -373,9 +339,7 @@ describe('re-rendering', () => {
 
     await model.refresh(); // same repos, so git state is all that moves
 
-    expect(events.sort()).toEqual(
-      [`all:${api.path}`, `all:${web.path}`, `pinned:${web.path}`].sort(),
-    );
+    expect(events.sort()).toEqual([`pinned:${web.path}`, `repo:${api.path}`].sort());
   });
 
   it('stops listening to the model once disposed', async () => {
@@ -394,21 +358,17 @@ describe('remembered fold state', () => {
   const COLLAPSED = 1;
   const EXPANDED = 2;
 
-  it('renders a section, a folder, and a repo the way the user last left each', async () => {
+  it('renders a folder and a repo the way the user last left each', async () => {
     const { provider, expansion } = await render();
-    const [heading] = provider.getChildren();
-    const [root] = sectionRows(provider, 'all');
+    const [root] = provider.getChildren();
     const repo = provider.findRepoElement(gateway.path);
-    // the defaults: sections and folders open, a repo holding nested repos closed
-    expect(stateOf(provider, heading)).toBe(EXPANDED);
+    // the defaults: folders open, a repo holding nested repos closed
     expect(stateOf(provider, root)).toBe(EXPANDED);
     expect(stateOf(provider, repo)).toBe(COLLAPSED);
 
-    await expansion.set(provider.idOf(required(heading, 'the heading')), false);
     await expansion.set(provider.idOf(required(root, 'a scan-folder row')), false);
     await expansion.set(provider.idOf(required(repo, 'a row for gateway')), true);
 
-    expect(stateOf(provider, heading)).toBe(COLLAPSED);
     expect(stateOf(provider, root)).toBe(COLLAPSED);
     expect(stateOf(provider, repo)).toBe(EXPANDED);
   });
@@ -420,19 +380,9 @@ describe('remembered fold state', () => {
     expect(stateOf(provider, row)).toBe(0); // None
   });
 
-  it('remembers each section of a repo apart, since each row folds on its own', async () => {
-    const { provider, pins } = await render();
-    await pins.pin(gateway.path);
-    provider.getChildren();
-    const pinned = required(provider.findRepoElement(gateway.path, 'pinned'), 'a pinned row');
-    const all = required(provider.findRepoElement(gateway.path, 'all'), 'an All row');
-    expect(provider.idOf(pinned)).not.toBe(provider.idOf(all));
-  });
-
   it('gives every row the id its tree item carries', async () => {
-    const { provider, pins, recency } = await render();
+    const { provider, pins } = await render();
     await pins.pin(api.path);
-    await recency.touch(web.path);
     const check = (nodes: TreeNode[]): void => {
       for (const node of nodes) {
         expect(provider.idOf(node)).toBe(provider.getTreeItem(node).id);

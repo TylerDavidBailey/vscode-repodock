@@ -7,7 +7,7 @@ import { PinStore } from './pins';
 import { RecencyStore } from './recency';
 import { RepoModel } from './repoModel';
 import { getConfig } from './settings';
-import { RepoDecorationProvider, RepoTreeProvider, type TreeNode } from './treeProvider';
+import { RepoTreeProvider, type TreeNode } from './treeProvider';
 
 /** The id the view is contributed under in `package.json`. */
 export const VIEW_ID = 'repodock.repos';
@@ -28,7 +28,7 @@ const RESCAN_SETTINGS = [
   'repodock.hiddenRepos',
 ];
 // only change how already-scanned repos are presented, so a rebuild suffices
-const REBUILD_SETTINGS = ['repodock.showNestedRepos', 'repodock.recentCount'];
+const REBUILD_SETTINGS = ['repodock.showNestedRepos', 'repodock.layout'];
 // `repodock.openInNewWindow` is in neither list: it is read live on each open, so a
 // change to it needs no reaction here.
 
@@ -51,17 +51,13 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     model,
     provider,
     view,
-    // remembered so a section or folder the user folded stays folded in the next window
+    // remembered so a folder the user folded stays folded in the next window
     view.onDidCollapseElement((event) => expansion.set(provider.idOf(event.element), false)),
     view.onDidExpandElement((event) => expansion.set(provider.idOf(event.element), true)),
   );
   const rebuildViews = () => {
     provider.rebuild();
   };
-
-  context.subscriptions.push(
-    vscode.window.registerFileDecorationProvider(new RepoDecorationProvider()),
-  );
 
   registerCommands(context, {
     model,
@@ -72,11 +68,14 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
   });
 
   const updateContexts = () => {
+    const config = getConfig();
     void vscode.commands.executeCommand(
       'setContext',
       'repodock.noDirectories',
-      getConfig().directories.length === 0,
+      config.directories.length === 0,
     );
+    // picks which of the two layout toggles the title bar shows
+    void vscode.commands.executeCommand('setContext', 'repodock.layout', config.layout);
   };
   updateContexts();
 
@@ -122,12 +121,11 @@ export function activate(context: vscode.ExtensionContext): RepoDockApi {
     return model.getRepos().find((repo) => canonicalPathKey(repo.path) === key);
   };
 
-  // Nothing is revealed or selected for the current repo. It is colored wherever it
-  // appears and heads the Recent section, so it is on screen without scrolling. Revealing
-  // its All Repositories row instead would scroll Pinned and Recent out of view, and would
-  // reopen sections the user had collapsed.
+  // Nothing is revealed or selected for the current repo. In the recent layout it heads
+  // the list below the pins. Revealing its row in the folder layout would scroll the
+  // pinned repos out of view and reopen folders the user had collapsed.
   const initialScan = refreshWithProgress(model).then(async () => {
-    // record the workspace we're sitting in so Recent knows about it
+    // record the workspace we're sitting in so the recent layout knows about it
     const currentPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const currentRepo = currentPath === undefined ? undefined : findRepoForPath(currentPath);
     if (currentRepo) {

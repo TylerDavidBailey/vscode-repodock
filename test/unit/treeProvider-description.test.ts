@@ -21,7 +21,7 @@ describe('describeRepo', () => {
     expect(describeRepo(makeGitState({ hasUpstream: false, ahead: 3, behind: 3 }))).toBe('main');
   });
 
-  it('keeps uncommitted counts out of the text, since the row badge carries them', () => {
+  it('keeps uncommitted counts out of the text, leaving them to the tooltip', () => {
     expect(describeRepo(makeGitState({ changes: 2, untracked: 1 }))).toBe('main');
   });
 

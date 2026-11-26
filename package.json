@@ -100,6 +100,18 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "repodock.showFolders",
+        "title": "Show Folders",
+        "category": "RepoDock",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "repodock.showRecent",
+        "title": "Show Recently Opened First",
+        "category": "RepoDock",
+        "icon": "$(history)"
+      },
+      {
         "command": "repodock.open",
         "title": "Open Repository",
         "category": "RepoDock"
@@ -212,14 +224,24 @@
       ],
       "view/title": [
         {
+          "command": "repodock.showRecent",
+          "when": "view == repodock.repos && repodock.layout == folders",
+          "group": "navigation@1"
+        },
+        {
+          "command": "repodock.showFolders",
+          "when": "view == repodock.repos && repodock.layout == recent",
+          "group": "navigation@1"
+        },
+        {
           "command": "repodock.addFolder",
           "when": "view == repodock.repos",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "repodock.refresh",
           "when": "view == repodock.repos",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "repodock.manageFolders",
@@ -336,19 +358,25 @@
             "type": "string"
           },
           "default": [],
-          "description": "Repositories hidden from every section (absolute paths, ~ supported). Add entries with the Hide Repository context menu; clear with the Unhide All Repositories command."
+          "description": "Repositories hidden from the view (absolute paths, ~ supported). Add entries with the Hide Repository context menu; clear with the Unhide All Repositories command."
         },
         "repodock.showNestedRepos": {
           "type": "boolean",
           "default": true,
-          "description": "Show repositories found inside another repository (submodules, vendored checkouts). Under All Repositories they appear beneath the repository that contains them."
+          "description": "Show repositories found inside another repository (submodules, vendored checkouts). In the folder layout they appear beneath the repository that contains them."
         },
-        "repodock.recentCount": {
-          "type": "number",
-          "default": 10,
-          "minimum": 1,
-          "maximum": 50,
-          "description": "How many repositories the Recent section lists."
+        "repodock.layout": {
+          "type": "string",
+          "enum": [
+            "folders",
+            "recent"
+          ],
+          "enumDescriptions": [
+            "The folders on disk, each repository under the folder that holds it.",
+            "One list, with the most recently opened repository first."
+          ],
+          "default": "folders",
+          "description": "How the repositories below the pinned ones are laid out. The button in the view's title bar switches between the two."
         },
         "repodock.openInNewWindow": {
           "type": "boolean",

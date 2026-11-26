@@ -17,8 +17,6 @@ export interface FolderNode {
   /** True for a configured scan folder, false for a directory inside one. */
   isRoot: boolean;
   children: RepoTreeNode[];
-  /** Repositories anywhere below, nested ones included. */
-  repoCount: number;
 }
 
 /** A repository, holding the repositories nested inside it. */
@@ -48,13 +46,6 @@ const byLabel = (a: RepoTreeNode, b: RepoTreeNode) =>
 
 function nodePath(node: RepoTreeNode): string {
   return node.kind === 'repo' ? node.repo.path : node.path;
-}
-
-/** How many repositories a node stands for: itself and everything nested below. */
-function countRepos(node: RepoTreeNode): number {
-  return node.kind === 'folder'
-    ? node.repoCount
-    : 1 + node.children.reduce((total, child) => total + countRepos(child), 0);
 }
 
 /** Folders before repositories, each group in name order, the way a file explorer lists them. */
@@ -98,14 +89,12 @@ function toNode(directory: Directory): RepoTreeNode {
 }
 
 function toFolder(directory: Directory, label: string, isRoot: boolean): FolderNode {
-  const children = sortChildren([...directory.entries.values()].map(toNode));
   return {
     kind: 'folder',
     path: directory.path,
     label,
     isRoot,
-    children,
-    repoCount: children.reduce((total, child) => total + countRepos(child), 0),
+    children: sortChildren([...directory.entries.values()].map(toNode)),
   };
 }
 
