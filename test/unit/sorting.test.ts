@@ -5,7 +5,6 @@ import {
   dedupeRepos,
   filterHiddenRepos,
   filterNestedRepos,
-  formatCompactRelativeTime,
   formatRelativeTime,
   groupReposByRoot,
   pinnedRepos,
@@ -431,23 +430,5 @@ describe('formatRelativeTime', () => {
   ];
   it.each(cases)('formats %s as %s', (_description, timestamp, expected) => {
     expect(formatRelativeTime(timestamp, now)).toBe(expected);
-  });
-});
-
-describe('formatCompactRelativeTime', () => {
-  const now = NOW;
-  const cases: [string, number, string][] = [
-    ['zero elapsed', now, 'now'],
-    ['a future timestamp (clock skew)', now + MINUTE, 'now'],
-    ['five minutes', now - 5 * MINUTE, '5m'],
-    ['23 hours', now - 23 * HOUR, '23h'],
-    ['30 hours', now - 30 * HOUR, '1d'],
-    ['six days', now - 6 * DAY, '6d'],
-    ['34 days', now - 34 * DAY, '4w'],
-    ['35 days', now - 35 * DAY, '1mo'],
-    ['400 days', now - 400 * DAY, '1y'],
-  ];
-  it.each(cases)('formats %s as %s', (_description, timestamp, expected) => {
-    expect(formatCompactRelativeTime(timestamp, now)).toBe(expected);
   });
 });

@@ -142,12 +142,10 @@ describe('RepoDock', () => {
     assert.deepStrictEqual(outline(), ['group/sub', '  beta', 'alpha', '  vendor']);
   });
 
-  it('shows the branch in the repo description once git state loads', () => {
+  it('shows the name alone on the row, and the branch in the tooltip once git state loads', () => {
     const item = itemFor('alpha');
-    assert.ok(
-      typeof item.description === 'string' && item.description.startsWith('main'),
-      `expected description to start with "main", got: ${String(item.description)}`,
-    );
+    assert.strictEqual(item.description, undefined);
+    assert.match((item.tooltip as vscode.MarkdownString).value, /Branch: main/);
     assert.strictEqual(item.command?.command, 'repodock.open');
   });
 
@@ -175,14 +173,16 @@ describe('RepoDock', () => {
     assert.strictEqual(itemFor('alpha', 'vendor').contextValue, 'repoNested');
   });
 
-  it('marks the repo open in the current window in its tooltip only', () => {
+  it('marks the repo open in the current window with a blue dot', () => {
     const alphaPath = path.join(fixture, 'alpha');
     api.model.setCurrentRepos([alphaPath]);
     try {
       const item = itemFor('alpha');
       // no resourceUri, which would bring the file-icon theme's icon with it
       assert.strictEqual(item.label, 'alpha');
-      assert.strictEqual(item.iconPath, undefined);
+      const icon = item.iconPath as vscode.ThemeIcon;
+      assert.strictEqual(icon.id, 'circle-small-filled');
+      assert.strictEqual(icon.color?.id, 'charts.blue');
       assert.strictEqual(item.resourceUri, undefined);
       assert.match((item.tooltip as vscode.MarkdownString).value, /open in this window/);
     } finally {

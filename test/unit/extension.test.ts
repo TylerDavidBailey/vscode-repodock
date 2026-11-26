@@ -234,7 +234,7 @@ describe('activation while the view opens', () => {
     const item = api.provider.getTreeItem(
       required(api.provider.findRepoElement(alpha.path), 'a row for alpha'),
     );
-    expect(item.description).toBe('now');
+    expect((item.tooltip as { value: string }).value).toContain('Last opened: just now');
   });
 
   it('keeps the scanning context set until every overlapping refresh has finished', async () => {
@@ -270,12 +270,11 @@ describe('the current workspace', () => {
     state.config.set('layout', 'recent');
     const api = await activateWithAlpha();
 
-    // git state is mocked away, so the description is the last-opened time alone, and
-    // it has one only because the initial scan called recency.touch
+    // the tooltip has a last-opened time only because the initial scan called recency.touch
     const item = api.provider.getTreeItem(
       required(api.provider.findRepoElement(alpha.path), 'a row for alpha'),
     );
-    expect(item.description).toBe('now');
+    expect((item.tooltip as { value: string }).value).toContain('Last opened: just now');
   });
 
   it('re-renders after recording the current repo, so the recent layout lists it first', async () => {
@@ -306,7 +305,9 @@ describe('the current workspace', () => {
     const api = await activateWithAlpha();
 
     const row = required(api.provider.findRepoElement(alpha.path), 'a row for alpha');
-    expect(api.provider.getTreeItem(row).description).toBe('');
+    expect((api.provider.getTreeItem(row).tooltip as { value: string }).value).not.toContain(
+      'Last opened',
+    );
   });
 
   it('never reveals or selects a row, which would scroll the pinned repos out of view', async () => {

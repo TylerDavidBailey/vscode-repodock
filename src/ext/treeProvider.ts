@@ -1,12 +1,6 @@
 import * as vscode from 'vscode';
 import { canonicalPathKey } from '../core/paths';
-import {
-  formatCompactRelativeTime,
-  formatRelativeTime,
-  pinnedRepos,
-  repoLabels,
-  sortByRecency,
-} from '../core/sorting';
+import { formatRelativeTime, pinnedRepos, repoLabels, sortByRecency } from '../core/sorting';
 import { buildRepoTree, type FolderNode, type RepoNode, type RepoTreeNode } from '../core/tree';
 import type { GitState, RepoInfo } from '../core/types';
 import type { ExpansionStore } from './expansion';
@@ -25,12 +19,6 @@ export interface GapNode {
 export type TreeNode = GapNode | RepoTreeNode;
 
 /**
- * Where a repo row sits, which decides its id and what its description shows. A repo has
- * exactly one row: pinning moves it to the top rather than copying it there.
- */
-type Placement = 'pinned' | 'tree' | 'recent';
-
-/**
  * Backs the RepoDock view: pinned repos first, by name, then a blank row, then every other
  * repo, laid out as `repodock.layout` says. The folder layout mirrors the disk, and the
  * recent layout is one list with the most recently opened first.
@@ -45,7 +33,8 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
   private roots?: TreeNode[];
   /** The row of each listed repo, by canonical path key. */
   private readonly repoNodes = new Map<string, RepoNode>();
-  private readonly placements = new Map<RepoNode, Placement>();
+  /** The rows of pinned repos, which take their own id prefix. A repo has one row only. */
+  private readonly pinnedRows = new Set<RepoNode>();
   private readonly parents = new Map<TreeNode, TreeNode>();
   private readonly subscriptions: vscode.Disposable[];
 
@@ -95,7 +84,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
   idOf(node: TreeNode): string {
     if (node.kind === 'gap') return 'gap';
     if (node.kind === 'folder') return `${node.isRoot ? 'root' : 'folder'}:${node.path}`;
-    return `${this.placements.get(node) === 'pinned' ? 'pinned' : 'repo'}:${node.repo.path}`;
+    return `${this.pinnedRows.has(node) ? 'pinned' : 'repo'}:${node.repo.path}`;
   }
 
   /** Expanded or Collapsed: the user's last choice for this row, else `isExpandedByDefault`. */
@@ -128,7 +117,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
   private render(): TreeNode[] {
     if (this.roots) return this.roots;
     this.repoNodes.clear();
-    this.placements.clear();
+    this.pinnedRows.clear();
     this.parents.clear();
 
     const config = getConfig();
@@ -142,8 +131,11 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
         ? flatList(sortByRecency(others, this.recency.all()))
         : buildRepoTree(others, config.directories);
 
-    for (const node of pinned) this.index(node, 'pinned');
-    for (const node of rest) this.index(node, config.layout === 'recent' ? 'recent' : 'tree');
+    for (const node of pinned) {
+      this.pinnedRows.add(node);
+      this.index(node);
+    }
+    for (const node of rest) this.index(node);
     // With no repos at all there are no rows, which is what brings up the welcome text in
     // package.json. The gap only separates two groups, so it goes when either is empty.
     const gap: GapNode[] =
@@ -152,13 +144,12 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
     return this.roots;
   }
 
-  private index(node: RepoTreeNode, placement: Placement, parent?: TreeNode): void {
+  private index(node: RepoTreeNode, parent?: TreeNode): void {
     if (parent) this.parents.set(node, parent);
     if (node.kind === 'repo') {
-      this.placements.set(node, placement);
       this.repoNodes.set(canonicalPathKey(node.repo.path), node);
     }
-    for (const child of node.children) this.index(child, placement, node);
+    for (const child of node.children) this.index(child, node);
   }
 
   private gapItem(node: GapNode): vscode.TreeItem {
@@ -188,10 +179,6 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
     const isCurrent = this.model.isCurrent(repo.path);
     const isPinned = this.pins.isPinned(repo.path);
 
-    // The repo open in this window looks like any other row; only its tooltip says so. A
-    // file decoration could color it, but that needs a resourceUri, and VS Code draws the
-    // file-icon theme's icon on a row with a resourceUri and no icon of its own. A label
-    // highlight draws as a find-match box, which reads as a search hit.
     const item = new vscode.TreeItem(
       node.label,
       // a repo that holds nested repos starts collapsed: they are vendored code more
@@ -199,10 +186,14 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
       node.children.length > 0 ? this.foldState(node, false) : vscode.TreeItemCollapsibleState.None,
     );
     item.id = this.idOf(node);
-    // only the recent layout shows when a repo was last opened: there the time explains the order
-    item.description = describeRepo(
-      state,
-      this.placements.get(node) === 'recent' ? openedAt : undefined,
+    // A dot on every repo tells repos from folders, and a blue one marks the repo open in
+    // this window. Coloring the label instead would need a resourceUri, and VS Code draws
+    // the file-icon theme's icon on a row with a resourceUri and no icon of its own; a
+    // label highlight draws as a find-match box. The row shows the name alone: branch,
+    // upstream distance, changes, and last-opened time are all in the tooltip.
+    item.iconPath = new vscode.ThemeIcon(
+      'circle-small-filled',
+      new vscode.ThemeColor(isCurrent ? 'charts.blue' : 'descriptionForeground'),
     );
     item.tooltip = repoTooltip(repo, state, openedAt, isCurrent, isPinned);
     // the -pinned suffix drives the pin/unpin menu items; /^repo/ matchers still apply
@@ -229,23 +220,6 @@ function flatList(repos: readonly RepoInfo[]): RepoNode[] {
     label: labels.get(repo.path) ?? repo.name,
     children: [],
   }));
-}
-
-/**
- * The dim text after the repo name: the branch, how far it is ahead of (↑) and behind (↓)
- * its upstream, and optionally when the repo was last opened. Uncommitted files are left to
- * the tooltip, to keep the row quiet.
- */
-export function describeRepo(state: GitState | undefined, openedAt?: number): string {
-  const parts: string[] = [];
-  if (state) {
-    const git = [state.detached ? `${state.branch} (detached)` : state.branch];
-    if (state.hasUpstream && state.ahead > 0) git.push(`↑${state.ahead}`);
-    if (state.hasUpstream && state.behind > 0) git.push(`↓${state.behind}`);
-    parts.push(git.join(' '));
-  }
-  if (openedAt !== undefined) parts.push(formatCompactRelativeTime(openedAt));
-  return parts.join(' · ');
 }
 
 function repoTooltip(

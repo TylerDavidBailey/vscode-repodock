@@ -232,6 +232,8 @@ function createUi(page, editorId, profile) {
                 /(^|\s)(file|folder)-icon(\s|$)/.test(label?.className ?? '') ||
                 /codicon-/.test(icon?.className ?? '') ||
                 (icon !== null && getComputedStyle(icon).backgroundImage !== 'none'),
+              // the color an icon is drawn in, which is how the open repo's dot stands out
+              iconColor: icon ? getComputedStyle(icon).color : '',
               // a label highlight carries its own color, so read that when there is one
               color: name ? getComputedStyle(name.querySelector('.highlight') ?? name).color : '',
               // false when the name itself is cut off with an ellipsis
@@ -282,7 +284,7 @@ function createUi(page, editorId, profile) {
     },
 
     /** Hovers a row until its tooltip shows, and returns the tooltip's text and HTML. */
-    async tooltip(label, part) {
+    async tooltip(label, part, nth) {
       const hover = page.locator('.monaco-hover:not(.hidden) .hover-contents').last();
       // a tooltip still showing for another row would be read in place of this one
       await page.mouse.move(1000, 600);
@@ -290,7 +292,7 @@ function createUi(page, editorId, profile) {
       // A row that is redrawn while the pointer rests on it drops its pending tooltip,
       // and rows are redrawn as each git result lands. Moving off and back on asks again.
       for (let attempt = 1; ; attempt++) {
-        await (await ui.row(label, part)).hover();
+        await (await ui.row(label, part, nth)).hover();
         try {
           await hover.waitFor({ state: 'visible', timeout: 4_000 });
           break;

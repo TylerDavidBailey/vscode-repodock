@@ -205,9 +205,3 @@ export function formatRelativeTime(timestamp: number, now: number = Date.now()):
   if (unit === 'd' && value === 1) return 'yesterday';
   return `${value}${unit} ago`;
 }
-
-/** Compact form ("5m", "1d"), used in the dim row description. */
-export function formatCompactRelativeTime(timestamp: number, now: number = Date.now()): string {
-  const { value, unit } = relativeTimeParts(timestamp, now);
-  return unit === 'now' ? 'now' : `${value}${unit}`;
-}

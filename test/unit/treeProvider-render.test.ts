@@ -109,15 +109,6 @@ describe('repo rows', () => {
     const [child] = sections.provider.getChildren(row);
     expect(child?.kind === 'repo' && child.label).toBe('vendor');
   });
-
-  it('carries no icon, pinned or open in this window or not', async () => {
-    const sections = await render([alpha]);
-    expect(itemFor(sections, alpha.path).iconPath).toBeUndefined();
-
-    await sections.pins.pin(alpha.path);
-    sections.model.setCurrentRepos([alpha.path]);
-    expect(itemFor(sections, alpha.path).iconPath).toBeUndefined();
-  });
 });
 
 describe('folder rows', () => {
@@ -183,52 +174,39 @@ describe('folder rows', () => {
   });
 });
 
-describe('the repo open in this window', () => {
-  it('renders like any other row: plain label, no icon, no resourceUri', async () => {
+describe('the repo row', () => {
+  const iconOf = (item: vscode.TreeItem) =>
+    item.iconPath as { id: string; color?: { id: string } } | undefined;
+
+  it('shows the name alone, whatever git reports', async () => {
+    const sections = await render([alpha], {
+      [alpha.path]: makeGitState({ ahead: 2, behind: 1, changes: 3, untracked: 2 }),
+    });
+    await sections.recency.touch(alpha.path);
+    expect(itemFor(sections, alpha.path).description).toBeUndefined();
+    state.config.set('layout', 'recent');
+    expect(itemFor(sections, alpha.path).description).toBeUndefined();
+  });
+
+  it('carries a dim dot, pinned or not', async () => {
+    const sections = await render([alpha]);
+    expect(iconOf(itemFor(sections, alpha.path))).toMatchObject({
+      id: 'circle-small-filled',
+      color: { id: 'descriptionForeground' },
+    });
+    await sections.pins.pin(alpha.path);
+    expect(iconOf(itemFor(sections, alpha.path))?.color?.id).toBe('descriptionForeground');
+  });
+
+  it('turns the dot blue for the repo open in this window, and sets no resourceUri', async () => {
     // a resourceUri would make VS Code draw the file-icon theme's icon on the row
     const sections = await render([alpha]);
     sections.model.setCurrentRepos([alpha.path]);
     const item = itemFor(sections, alpha.path);
     expect(item.label).toBe('alpha');
+    expect(iconOf(item)?.color?.id).toBe('charts.blue');
     expect(item.resourceUri).toBeUndefined();
-    expect(item.iconPath).toBeUndefined();
     expect(tooltipOf(item)).toContain('open in this window');
-  });
-});
-
-describe('the row description', () => {
-  it('is empty with no git state', async () => {
-    const sections = await render([alpha]);
-    expect(itemFor(sections, alpha.path).description).toBe('');
-  });
-
-  it('shows the branch and how far it is from its upstream', async () => {
-    const sections = await render([alpha], {
-      [alpha.path]: makeGitState({ ahead: 2, behind: 1 }),
-    });
-    expect(itemFor(sections, alpha.path).description).toBe('main ↑2 ↓1');
-  });
-
-  it('leaves uncommitted changes to the tooltip', async () => {
-    const sections = await render([alpha], {
-      [alpha.path]: makeGitState({ changes: 3, untracked: 2 }),
-    });
-    expect(itemFor(sections, alpha.path).description).toBe('main');
-  });
-
-  it('shows the last-opened time in the recent layout only, where it explains the order', async () => {
-    const beta = makeRepo({ path: '/srv/repos/beta' });
-    const gitStates = { [alpha.path]: makeGitState(), [beta.path]: makeGitState() };
-    const sections = await render([alpha, beta], gitStates);
-    await sections.recency.touch(alpha.path);
-    await sections.recency.touch(beta.path);
-    expect(itemFor(sections, alpha.path).description).toBe('main');
-
-    state.config.set('layout', 'recent');
-    expect(itemFor(sections, alpha.path).description).toBe('main · now');
-    // a pinned row is in name order, so a time would explain nothing there
-    await sections.pins.pin(beta.path);
-    expect(itemFor(sections, beta.path).description).toBe('main');
   });
 });
 

@@ -17,34 +17,31 @@ import { execFileSync } from 'node:child_process';
 // functions handed to page.evaluate run inside the editor window
 /* global document, getComputedStyle */
 
-/** The pinned repos under the base settings, as [label, description] rows. */
-const PINNED = [
-  ['infrastructure', 'main'],
-  ['payments-api', 'fix/retry-webhooks ↑1'],
-];
+/** The pinned repos under the base settings. */
+const PINNED = ['infrastructure', 'payments-api'];
 
 /**
- * The folder layout below the gap under the base settings, as [level, label, description]
- * rows. The two pinned repos have moved up, out of services/ and ~/work.
+ * The folder layout below the gap under the base settings, as [level, label] rows. The two
+ * pinned repos have moved up, out of services/ and ~/work.
  */
 const FOLDER_TREE = [
-  [1, '~/projects', ''],
-  [2, 'services', ''],
-  [3, 'api-gateway', 'main'],
-  [3, 'user-service', 'main ↓4'],
-  [2, 'tools', ''],
-  [3, 'experiments', ''],
-  [4, 'playground', /^[0-9a-f]{7} \(detached\)$/],
-  [3, 'deploy-cli', 'develop'],
-  [2, 'web', ''],
-  [3, 'admin-dashboard', 'release/v2.1.0'],
-  [3, 'playground', 'main'],
-  [3, 'storefront', 'feat/checkout-redesign ↑2 ↓1'],
-  [2, 'dev-setup', 'main ↑3'],
-  [1, '~/work', ''],
-  [2, 'clients', ''],
-  [3, 'client-portal', 'feature/sso-login-redirect-handling'],
-  [3, 'reporting-api', 'main ↓2'],
+  [1, '~/projects'],
+  [2, 'services'],
+  [3, 'api-gateway'],
+  [3, 'user-service'],
+  [2, 'tools'],
+  [3, 'experiments'],
+  [4, 'playground'],
+  [3, 'deploy-cli'],
+  [2, 'web'],
+  [3, 'admin-dashboard'],
+  [3, 'playground'],
+  [3, 'storefront'],
+  [2, 'dev-setup'],
+  [1, '~/work'],
+  [2, 'clients'],
+  [3, 'client-portal'],
+  [3, 'reporting-api'],
 ];
 
 /**
@@ -52,31 +49,38 @@ const FOLDER_TREE = [
  * newest first, then the repos never opened, by name.
  */
 const RECENT_LIST = [
-  [1, 'storefront', /^feat\/checkout-redesign ↑2 ↓1 · (now|\dm)$/],
-  [1, 'user-service', 'main ↓4 · 5h'],
-  [1, 'client-portal', 'feature/sso-login-redirect-handling · 1d'],
-  [1, 'admin-dashboard', 'release/v2.1.0 · 3d'],
-  [1, 'deploy-cli', 'develop · 1w'],
-  [1, 'dev-setup', 'main ↑3 · 1mo'],
-  [1, 'api-gateway', 'main'],
-  [1, 'playground (experiments)', /^[0-9a-f]{7} \(detached\)$/],
-  [1, 'playground (web)', 'main'],
-  [1, 'reporting-api', 'main ↓2'],
-  [1, 'shared-utils', 'main'],
+  [1, 'storefront'],
+  [1, 'user-service'],
+  [1, 'client-portal'],
+  [1, 'admin-dashboard'],
+  [1, 'deploy-cli'],
+  [1, 'dev-setup'],
+  [1, 'api-gateway'],
+  [1, 'playground (experiments)'],
+  [1, 'playground (web)'],
+  [1, 'reporting-api'],
+  [1, 'shared-utils'],
 ];
 
-/** Asserts a part's rows against [level, label, description] triples. */
+/**
+ * Asserts a part's rows against [level, label] pairs, and that no row shows anything
+ * beside its name: branch, sync arrows, counts, and times all live in the tooltip.
+ */
 async function expectTree(ui, assert, expected, part) {
   const rows = await ui.rows(part);
   assert.deepEqual(
     rows.map((row) => [row.level, row.label]),
-    expected.map(([level, label]) => [level, label]),
+    expected,
   );
-  for (const [index, [, label, description]] of expected.entries()) {
-    if (description instanceof RegExp) assert.match(rows[index].description, description, label);
-    else assert.equal(rows[index].description, description, label);
-  }
+  for (const row of rows) assert.equal(row.description, '', row.label);
 }
+
+/** The text of a row's tooltip; `nth` picks among rows sharing a label. */
+const tooltipOf = async (ui, label, part, nth) => {
+  const { text } = await ui.tooltip(label, part, nth);
+  await ui.dismiss();
+  return text;
+};
 
 const find = async (ui, label, part) => (await ui.rows(part)).find((row) => row.label === label);
 
@@ -127,9 +131,11 @@ export const scenarios = [
     title: 'Pinned repos are listed by name with branch and sync arrows, above the gap',
     async run(ui, assert, P) {
       await ui.eventually(async () => {
-        assert.deepEqual(
-          (await ui.rows(P.pinned)).map((row) => [row.label, row.description]),
-          PINNED,
+        await expectTree(
+          ui,
+          assert,
+          PINNED.map((label) => [1, label]),
+          P.pinned,
         );
         // pinning moves a repo; it is not repeated below
         assert.ok(!(await ui.labels(P.rest)).includes('payments-api'));
@@ -155,10 +161,7 @@ export const scenarios = [
     settings: { 'repodock.layout': 'recent' },
     async run(ui, assert, P) {
       await ui.eventually(async () => {
-        assert.deepEqual(
-          (await ui.rows(P.pinned)).map((row) => [row.label, row.description]),
-          PINNED,
-        );
+        assert.deepEqual(await ui.labels(P.pinned), PINNED);
         await expectTree(ui, assert, RECENT_LIST, P.rest);
         assert.equal((await ui.titleButtons())[0], 'Show Folders');
       });
@@ -166,34 +169,47 @@ export const scenarios = [
     },
   },
   {
-    id: 'quiet-rows',
+    id: 'row-marks',
     kind: 'normal',
-    title: 'No row carries an icon, a count, or a badge, dirty or clean, folder or repo',
+    title: 'Every repo row is a dot and a name; folders and the gap carry no icon or text',
     async run(ui, assert) {
+      const folders = [
+        '~/projects',
+        'services',
+        'tools',
+        'experiments',
+        'web',
+        '~/work',
+        'clients',
+      ];
       await ui.eventually(async () => {
         const tree = await ui.tree();
         assert.ok(tree.length > 10);
         for (const row of tree) {
-          assert.equal(row.hasIcon, false, `${row.label} has an icon`);
-          assert.equal(row.badge, '', `${row.label} has a badge`);
+          const isRepo = row.label !== '' && !folders.includes(row.label);
+          // a dot, not a file icon: VS Code draws the file-icon theme's icon on a row
+          // that has a resourceUri and no icon of its own
+          assert.equal(row.icon, isRepo ? 'circle-small-filled' : '', row.label);
+          assert.equal(row.hasIcon, isRepo, row.label);
+          assert.equal(row.description, '', row.label);
+          assert.equal(row.badge, '', row.label);
         }
-        // storefront has uncommitted files; they are in its tooltip, not on its row
-        assert.equal((await find(ui, 'storefront')).badge, '');
-        assert.equal((await find(ui, 'web')).description, '');
       });
     },
   },
   {
     id: 'current-repo',
     kind: 'normal',
-    title: 'The repo open in this window looks like any other row, and nothing is selected',
+    title: 'The repo open in this window has a blue dot, and nothing is selected or scrolled to',
     async run(ui, assert) {
       await ui.eventually(async () => {
-        // only its tooltip says it is open here (see 'tooltip'); the row is unmarked
         const current = await find(ui, 'storefront');
         const other = await find(ui, 'admin-dashboard');
+        const pinned = await find(ui, 'payments-api');
+        assert.notEqual(current.iconColor, other.iconColor);
+        assert.equal(other.iconColor, pinned.iconColor);
+        // the name itself is not recolored
         assert.equal(current.color, other.color);
-        assert.equal(current.hasIcon, false);
         // a selection would mean the view scrolled itself to some row on load
         assert.deepEqual(
           (await ui.tree()).filter((row) => row.selected),
@@ -338,7 +354,7 @@ export const scenarios = [
       await ui.eventually(async () => {
         const nested = await find(ui, 'vendor/shared-utils');
         assert.equal(nested.level, 4);
-        assert.equal(nested.description, 'main');
+        assert.equal(nested.icon, 'circle-small-filled');
       });
       await ui.shot('nested-repos');
       await ui.toggle('api-gateway');
@@ -532,7 +548,7 @@ export const scenarios = [
         await ui.eventually(async () => {
           const row = await find(ui, 'zz-fresh-clone');
           assert.equal(row.level, 3);
-          assert.equal(row.description, 'trunk');
+          assert.match(await tooltipOf(ui, 'zz-fresh-clone'), /Branch: trunk/);
         });
       } finally {
         fs.rmSync(repo, { recursive: true, force: true });
@@ -546,27 +562,26 @@ export const scenarios = [
   {
     id: 'branch-switch',
     kind: 'normal',
-    title: 'Switching branch in a terminal shows the new branch after Refresh',
-    async run(ui, assert) {
+    title: 'Switching branch in a terminal shows the new branch in the tooltip after Refresh',
+    async run(ui, assert, P) {
       const repo = ui.fixture('projects/web/playground');
-      await ui.eventually(async () =>
-        assert.equal((await findWebPlayground(ui)).description, 'main'),
-      );
+      // the second playground below the gap is the one under web/
+      const branchOf = async () =>
+        /Branch: (\S+)/.exec(await tooltipOf(ui, 'playground', P.rest, 1))?.[1];
+      await ui.eventually(() => expectTree(ui, assert, FOLDER_TREE, P.rest));
+      assert.equal(await branchOf(), 'main');
       git(repo, 'checkout', '-q', '-b', 'scenario/temp-branch');
       try {
         await ui.command('RepoDock: Refresh');
-        await ui.eventually(async () => {
-          // no upstream yet, so no arrows
-          assert.equal((await findWebPlayground(ui)).description, 'scenario/temp-branch');
-        });
+        await ui.eventually(async () => assert.equal(await branchOf(), 'scenario/temp-branch'));
+        // the row itself still shows the name alone
+        assert.equal((await findWebPlayground(ui)).description, '');
       } finally {
         git(repo, 'checkout', '-q', 'main');
         git(repo, 'branch', '-q', '-D', 'scenario/temp-branch');
       }
       await ui.command('RepoDock: Refresh');
-      await ui.eventually(async () =>
-        assert.equal((await findWebPlayground(ui)).description, 'main'),
-      );
+      await ui.eventually(async () => assert.equal(await branchOf(), 'main'));
     },
   },
   {
@@ -694,9 +709,9 @@ export const scenarios = [
           ui,
           assert,
           [
-            [1, 'clients', ''],
-            [2, 'client-portal', 'feature/sso-login-redirect-handling'],
-            [2, 'reporting-api', 'main ↓2'],
+            [1, 'clients'],
+            [2, 'client-portal'],
+            [2, 'reporting-api'],
           ],
           P.rest,
         );
@@ -749,11 +764,11 @@ export const scenarios = [
     async run(ui, assert, P) {
       await ui.eventually(async () => {
         const top = (await ui.rows(P.rest)).filter((row) => row.level === 1);
-        // with no icons, the twistie and the branch are what tell a repo from a folder
+        // the dot and the missing twistie are what tell a repo from a folder
         assert.deepEqual(
-          top.map((row) => [row.label, row.description, row.expanded]),
+          top.map((row) => [row.label, row.icon, row.expanded]),
           [
-            ['dev-setup', 'main ↑3', null],
+            ['dev-setup', 'circle-small-filled', null],
             ['~/work', '', 'true'],
           ],
         );
@@ -853,12 +868,13 @@ export const scenarios = [
   {
     id: 'unusual-git-states',
     kind: 'edge',
-    title: 'A repo with no commits and a linked worktree each show their branch',
+    title: 'A repo with no commits and a linked worktree each report their branch',
     settings: { 'repodock.directories': ['~/edge'] },
     async run(ui, assert) {
+      await ui.eventually(async () => assert.ok(await find(ui, 'linked-worktree')));
       await ui.eventually(async () => {
-        assert.equal((await find(ui, 'empty-repo')).description, 'main');
-        assert.equal((await find(ui, 'linked-worktree')).description, 'worktree-branch');
+        assert.match(await tooltipOf(ui, 'empty-repo'), /Branch: main/);
+        assert.match(await tooltipOf(ui, 'linked-worktree'), /Branch: worktree-branch/);
       });
     },
   },
@@ -870,12 +886,12 @@ export const scenarios = [
     async run(ui, assert) {
       await ui.eventually(async () => {
         assert.deepEqual(
-          (await ui.rows()).slice(0, 4).map((row) => [row.level, row.label, row.description]),
+          (await ui.rows()).slice(0, 4).map((row) => [row.level, row.label]),
           [
-            [1, 'deep/a/b', ''],
-            [2, 'c/d', ''],
-            [3, 'too-deep', 'main'],
-            [2, 'at-limit', 'main'],
+            [1, 'deep/a/b'],
+            [2, 'c/d'],
+            [3, 'too-deep'],
+            [2, 'at-limit'],
           ],
         );
       });
@@ -907,19 +923,17 @@ export const scenarios = [
   {
     id: 'long-branch-names',
     kind: 'edge',
-    title: 'A long branch name is cut short before the repo name ever is',
+    title: 'A long branch name stays off the row, which keeps the whole repo name',
     async run(ui, assert) {
       await ui.eventually(async () => {
         const row = await find(ui, 'client-portal');
+        assert.equal(row.description, '');
         assert.equal(row.isNameWhole, true);
       });
-      ui.setSettings({ 'repodock.layout': 'recent' });
-      await ui.eventually(async () => {
-        // the recent layout adds a time to the same long description
-        const row = await find(ui, 'client-portal');
-        assert.match(row.description, / · 1d$/);
-        assert.equal(row.isNameWhole, true);
-      });
+      assert.match(
+        await tooltipOf(ui, 'client-portal'),
+        /Branch: feature\/sso-login-redirect-handling/,
+      );
     },
   },
   {
@@ -932,7 +946,7 @@ export const scenarios = [
         const rows = await ui.rows();
         assert.equal(rows[0]?.total, 150);
         assert.equal(rows[0]?.label, 'repo-001');
-        assert.equal(rows[0]?.description, 'main');
+        assert.equal(rows[0]?.icon, 'circle-small-filled');
       }, 30_000);
       await ui.shot('many-repos');
     },
@@ -1009,13 +1023,11 @@ export const scenarios = [
 
         await ui.command('RepoDock: Refresh');
         await ui.eventually(async () => {
-          assert.deepEqual(
-            (await ui.rows()).map((row) => [row.label, row.description]),
-            [
-              ['filter-trap', 'main'],
-              ['fsmonitor-trap', 'main'],
-            ],
-          );
+          assert.deepEqual(await ui.labels(), ['filter-trap', 'fsmonitor-trap']);
+          // git really ran in both: their branches loaded
+          for (const label of ['filter-trap', 'fsmonitor-trap']) {
+            assert.match(await tooltipOf(ui, label), /Branch: main/);
+          }
         });
         // one more full load, so both git calls per repo have certainly happened
         await ui.command('RepoDock: Refresh');
@@ -1044,10 +1056,7 @@ export const scenarios = [
       }, 60_000);
       await ui.command('RepoDock: Focus on Repositories View');
       await ui.eventually(async () => {
-        assert.deepEqual(
-          (await ui.rows(P.pinned)).map((row) => [row.label, row.description]),
-          PINNED,
-        );
+        assert.deepEqual(await ui.labels(P.pinned), PINNED);
         // ~/work is still folded; everything above it is drawn as before
         const folded = FOLDER_TREE.slice(
           0,
@@ -1064,7 +1073,6 @@ export const scenarios = [
       await ui.eventually(async () => {
         const [first, second] = await ui.rows(P.rest);
         assert.equal(first?.label, 'dev-setup');
-        assert.match(first?.description ?? '', /^main ↑3 · (now|\dm)$/);
         // the window it came from was opened moments earlier, so it is next
         assert.equal(second?.label, 'storefront');
       }, 30_000);
