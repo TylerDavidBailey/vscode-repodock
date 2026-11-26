@@ -150,15 +150,17 @@ async function seedGlobalState(profile) {
   database.close();
 }
 
-/** The headings of RepoDock's three sections, as scenarios name them. */
-export const SECTIONS = { pinned: 'Pinned', recent: 'Recent', all: 'All Repositories' };
+/**
+ * The two parts of RepoDock's tree, as scenarios name them: the pinned repos at the top,
+ * each marked with a pin, and the rest below them.
+ */
+export const PARTS = { pinned: 'pinned', rest: 'rest' };
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * The helpers a scenario drives the editor with. Everything reads the live DOM. The view
- * is one tree whose top-level rows are the section headings, so helpers that take a
- * `section` look at the rows under that heading and default to All Repositories.
+ * The helpers a scenario drives the editor with. Everything reads the live DOM. Helpers
+ * that take a `part` look at the pinned rows or the rest, and default to the whole tree.
  */
 function createUi(page, editorId, profile) {
   const settingsFile = path.join(profile, 'User', 'settings.json');
@@ -198,7 +200,7 @@ function createUi(page, editorId, profile) {
     },
 
     /**
-     * Every rendered row of the view, top to bottom, section headings included. Only rows
+     * Every rendered row of the view, top to bottom. Only rows
      * scrolled into view exist. `index` is the row's position in the whole tree. `badge` is
      * the count at the right edge of the row and `color` the label's computed color: both
      * come from a file decoration, which VS Code draws with CSS rather than text.
@@ -223,7 +225,16 @@ function createUi(page, editorId, profile) {
               expanded: row.getAttribute('aria-expanded'),
               badge: badge === 'none' ? '' : badge.replace(/^"|"$/g, ''),
               icon: /codicon-(?!colored)([\w-]+)/.exec(icon?.className ?? '')?.[1] ?? '',
-              color: name ? getComputedStyle(name).color : '',
+              // any icon at all: a codicon, an image, or the file-icon theme's glyph, which
+              // VS Code draws for a row that has a resourceUri and no icon of its own
+              hasIcon:
+                /(^|\s)(file|folder)-icon(\s|$)/.test(label?.className ?? '') ||
+                /codicon-/.test(icon?.className ?? '') ||
+                (icon !== null && getComputedStyle(icon).backgroundImage !== 'none'),
+              // the color an icon is drawn in, which is how the open repo's dot stands out
+              iconColor: icon ? getComputedStyle(icon).color : '',
+              // a label highlight carries its own color, so read that when there is one
+              color: name ? getComputedStyle(name.querySelector('.highlight') ?? name).color : '',
               // false when the name itself is cut off with an ellipsis
               isNameWhole: name ? name.scrollWidth <= name.clientWidth : true,
               top: row.getBoundingClientRect().top,
@@ -231,50 +242,30 @@ function createUi(page, editorId, profile) {
           });
       }, rowSelector),
 
-    /** The section headings on screen, top to bottom, each with the count beside it. */
-    sections: async () =>
-      (await ui.tree())
-        .filter((row) => row.level === 1)
-        .map((row) => ({
-          title: row.label,
-          count: row.description,
-          isExpanded: row.expanded === 'true',
-        })),
-
     /**
-     * The rows under one section heading, top to bottom, with `level` counted from the
-     * heading: a row directly under it is level 1. Empty when the section is not shown.
+     * The rows of one part of the tree, top to bottom, or every row without a `part`. The
+     * pinned part is the run of pinned rows at the top, told apart by their pin icon.
      */
-    async rows(section = SECTIONS.all) {
+    async rows(part) {
       const tree = await ui.tree();
-      const start = tree.findIndex((row) => row.level === 1 && row.label === section);
-      if (start === -1) return [];
-      const rows = [];
-      for (const row of tree.slice(start + 1)) {
-        if (row.level === 1) break;
-        rows.push({ ...row, level: row.level - 1 });
-      }
-      return rows;
+      if (part === undefined) return tree;
+      const end = tree.findIndex((row) => row.icon !== 'pinned');
+      const split = end === -1 ? tree.length : end;
+      return part === PARTS.pinned ? tree.slice(0, split) : tree.slice(split);
     },
 
-    labels: async (section = SECTIONS.all) => (await ui.rows(section)).map((row) => row.label),
+    labels: async (part) => (await ui.rows(part)).map((row) => row.label),
 
     /**
-     * One row of a section, by its exact label. `nth` picks among rows sharing a label.
-     * Resolved against the tree as it is now, so look a row up again after anything that
-     * adds or removes rows above it.
+     * One row, by its exact label. `nth` picks among rows sharing a label. Resolved against
+     * the tree as it is now, so look a row up again after anything that adds or removes
+     * rows above it.
      */
-    async row(label, section = SECTIONS.all, nth = 0) {
-      const matches = (await ui.rows(section)).filter((row) => row.label === label);
-      assert.ok(matches[nth], `no "${label}" row under ${section}`);
+    async row(label, part, nth = 0) {
+      const matches = (await ui.rows(part)).filter((row) => row.label === label);
+      assert.ok(matches[nth], `no "${label}" row in ${part ?? 'the tree'}`);
       return page.locator(`${rowSelector}[data-index="${matches[nth].index}"]`);
     },
-
-    /** The row of a section heading. */
-    heading: (section) =>
-      page.locator(`${rowSelector}[aria-level="1"]`).filter({
-        has: page.locator('.label-name', { hasText: new RegExp(`^${escapeRegExp(section)}$`) }),
-      }),
 
     /** Runs a command by its Command Palette title, the way a user would. */
     async command(title) {
@@ -288,12 +279,15 @@ function createUi(page, editorId, profile) {
     },
 
     /** Hovers a row until its tooltip shows, and returns the tooltip's text and HTML. */
-    async tooltip(label, section) {
+    async tooltip(label, part, nth) {
       const hover = page.locator('.monaco-hover:not(.hidden) .hover-contents').last();
+      // a tooltip still showing for another row would be read in place of this one
+      await page.mouse.move(1000, 600);
+      await hover.waitFor({ state: 'hidden', timeout: 4_000 }).catch(() => undefined);
       // A row that is redrawn while the pointer rests on it drops its pending tooltip,
       // and rows are redrawn as each git result lands. Moving off and back on asks again.
       for (let attempt = 1; ; attempt++) {
-        await (await ui.row(label, section)).hover();
+        await (await ui.row(label, part, nth)).hover();
         try {
           await hover.waitFor({ state: 'visible', timeout: 4_000 });
           break;
@@ -307,10 +301,10 @@ function createUi(page, editorId, profile) {
     },
 
     /** Right-clicks a row and returns the labels of its context menu, top to bottom. */
-    async openContextMenu(label, section) {
+    async openContextMenu(label, part) {
       // an open menu covers the tree with a click shield, so a second right-click never lands
       if (await page.locator('.context-view .monaco-menu').isVisible()) await ui.dismiss();
-      await (await ui.row(label, section)).click({ button: 'right' });
+      await (await ui.row(label, part)).click({ button: 'right' });
       const items = page.locator('.context-view .monaco-menu .action-item:not(.disabled)');
       await items.first().waitFor({ state: 'visible' });
       return (await items.locator('.action-label').allInnerTexts()).filter(Boolean);
@@ -329,8 +323,8 @@ function createUi(page, editorId, profile) {
     },
 
     /** Hovers a row and returns the tooltips of the buttons that appear on it, left to right. */
-    async rowButtons(label, section, nth) {
-      const row = await ui.row(label, section, nth);
+    async rowButtons(label, part, nth) {
+      const row = await ui.row(label, part, nth);
       await row.hover();
       await sleep(200);
       return row
@@ -339,8 +333,8 @@ function createUi(page, editorId, profile) {
     },
 
     /** Clicks one of the buttons a row shows on hover, matched by its tooltip. */
-    async clickRowButton(label, button, section, nth) {
-      const row = await ui.row(label, section, nth);
+    async clickRowButton(label, button, part, nth) {
+      const row = await ui.row(label, part, nth);
       await row.hover();
       await row.locator(`.actions a.action-label[aria-label="${button}"]`).click();
       await sleep(300);
@@ -350,19 +344,10 @@ function createUi(page, editorId, profile) {
      * Expands or collapses a row by its twistie, without triggering the row's click.
      * `recursive` holds Alt, which makes VS Code expand everything below the row too.
      */
-    async toggle(label, section, { recursive = false } = {}) {
+    async toggle(label, part, { recursive = false } = {}) {
       await (
-        await ui.row(label, section)
+        await ui.row(label, part)
       )
-        .locator('.monaco-tl-twistie')
-        .click({ modifiers: recursive ? ['Alt'] : [] });
-      await sleep(300);
-    },
-
-    /** Expands or collapses a whole section by its heading's twistie. */
-    async toggleSection(section, { recursive = false } = {}) {
-      await ui
-        .heading(section)
         .locator('.monaco-tl-twistie')
         .click({ modifiers: recursive ? ['Alt'] : [] });
       await sleep(300);
@@ -526,7 +511,7 @@ async function runEditor(playwright, editorId, selected) {
       try {
         await ui.dismiss();
         ui.setSettings(scenario.settings);
-        await scenario.run(ui, assert, SECTIONS);
+        await scenario.run(ui, assert, PARTS);
         result.status = 'pass';
       } catch (error) {
         result.status = 'fail';

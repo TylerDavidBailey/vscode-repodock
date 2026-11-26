@@ -79,7 +79,7 @@ describe('opening a repository', () => {
     expect(options).toEqual({ forceNewWindow: false });
   });
 
-  it('re-renders the views, so Recent moves in a window that stays open', async () => {
+  it('re-renders the views, so the recent order moves in a window that stays open', async () => {
     await run('repodock.openInNewWindow', element);
     expect(rebuildViews).toHaveBeenCalledTimes(1);
   });
@@ -91,7 +91,6 @@ describe('opening a repository', () => {
       label: 'code',
       isRoot: true,
       children: [],
-      repoCount: 0,
     };
     await run('repodock.open', folder);
     await run('repodock.open');

@@ -14,14 +14,12 @@ const inCode = (relPath: string, parentRelPath?: string) =>
 const inWork = (relPath: string) => makeRepo({ path: `/srv/work/${relPath}`, root: WORK });
 
 /**
- * The tree as indented text, one row per line: folders end in '/', and a folder's repo
- * count follows it in brackets. Comparing the outline keeps each test readable as the tree
- * a user would see.
+ * The tree as indented text, one row per line, with folders ending in '/'. Comparing the
+ * outline keeps each test readable as the tree a user would see.
  */
 function outline(nodes: RepoTreeNode[], depth = 0): string[] {
   return nodes.flatMap((node) => [
-    '  '.repeat(depth) +
-      (node.kind === 'folder' ? `${node.label}/ [${node.repoCount}]` : node.label),
+    '  '.repeat(depth) + (node.kind === 'folder' ? `${node.label}/` : node.label),
     ...outline(node.children, depth + 1),
   ]);
 }
@@ -46,9 +44,9 @@ describe('buildRepoTree', () => {
       inCode('services/auth'),
     ];
     expect(outline(buildRepoTree(repos, [CODE]))).toEqual([
-      'frontend/ [1]',
+      'frontend/',
       '  web',
-      'services/ [2]',
+      'services/',
       '  auth',
       '  payments-api',
       'dotfiles',
@@ -57,7 +55,7 @@ describe('buildRepoTree', () => {
 
   it('gives each root its own row, in configured order, once two roots hold repos', () => {
     const tree = buildRepoTree([inCode('alpha'), inWork('zeta')], [WORK, CODE]);
-    expect(outline(tree)).toEqual([`${WORK}/ [1]`, '  zeta', `${CODE}/ [1]`, '  alpha']);
+    expect(outline(tree)).toEqual([`${WORK}/`, '  zeta', `${CODE}/`, '  alpha']);
     expect(tree.map((node) => node.kind === 'folder' && node.isRoot)).toEqual([true, true]);
   });
 
@@ -69,7 +67,7 @@ describe('buildRepoTree', () => {
   it('merges a chain of folders that each hold only the next into one row', () => {
     const repos = [inCode('tools/experiments/sandbox'), inCode('alpha')];
     const tree = buildRepoTree(repos, [CODE]);
-    expect(outline(tree)).toEqual(['tools/experiments/ [1]', '  sandbox', 'alpha']);
+    expect(outline(tree)).toEqual(['tools/experiments/', '  sandbox', 'alpha']);
     // the merged row stands for its deepest folder
     expect(tree[0]?.kind === 'folder' && tree[0].path).toBe(absPath('/srv/code/tools/experiments'));
   });
@@ -77,8 +75,8 @@ describe('buildRepoTree', () => {
   it('stops merging at a folder that holds more than one thing', () => {
     const repos = [inCode('tools/experiments/sandbox'), inCode('tools/cli')];
     expect(outline(buildRepoTree(repos, [CODE]))).toEqual([
-      'tools/ [2]',
-      '  experiments/ [1]',
+      'tools/',
+      '  experiments/',
       '    sandbox',
       '  cli',
     ]);
@@ -86,13 +84,7 @@ describe('buildRepoTree', () => {
 
   it('never merges a scan root with the folder inside it', () => {
     const tree = buildRepoTree([inCode('only/alpha'), inWork('zeta')], [CODE, WORK]);
-    expect(outline(tree)).toEqual([
-      `${CODE}/ [1]`,
-      '  only/ [1]',
-      '    alpha',
-      `${WORK}/ [1]`,
-      '  zeta',
-    ]);
+    expect(outline(tree)).toEqual([`${CODE}/`, '  only/', '    alpha', `${WORK}/`, '  zeta']);
   });
 
   it('hangs a nested repo under the repo that contains it, labelled by its path inside', () => {
@@ -102,7 +94,7 @@ describe('buildRepoTree', () => {
       inCode('services/gateway/docs', 'services/gateway'),
     ];
     expect(outline(buildRepoTree(repos, [CODE]))).toEqual([
-      'services/ [3]',
+      'services/',
       '  gateway',
       '    docs',
       '    vendor/shared-utils',
@@ -118,18 +110,12 @@ describe('buildRepoTree', () => {
     expect(outline(buildRepoTree(repos, [CODE]))).toEqual(['outer', '  middle', '    inner']);
   });
 
-  it('counts nested repos in every folder above them', () => {
-    const repos = [inCode('a/outer'), inCode('a/outer/inner', 'a/outer'), inWork('zeta')];
-    const [code] = buildRepoTree(repos, [CODE, WORK]);
-    expect(code?.kind === 'folder' && code.repoCount).toBe(2);
-  });
-
   it('places a nested repo by its folders when its parent is not in the list', () => {
     // overlapping scan roots are deduped per repo, so a parent can be kept under another
     // root while the repo nested in it stays here
     const orphan = inCode('services/gateway/vendor/sdk', 'services/gateway');
     expect(outline(buildRepoTree([orphan, inCode('alpha')], [CODE]))).toEqual([
-      'services/gateway/vendor/ [1]',
+      'services/gateway/vendor/',
       '  sdk',
       'alpha',
     ]);

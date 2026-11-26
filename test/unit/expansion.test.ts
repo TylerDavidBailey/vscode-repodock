@@ -5,37 +5,37 @@ import { fakeMemento } from './helpers/memento';
 describe('ExpansionStore', () => {
   it('answers with the fallback for a row the user never toggled', () => {
     const store = new ExpansionStore(fakeMemento());
-    expect(store.isExpanded('section:pinned', true)).toBe(true);
+    expect(store.isExpanded('folder:/srv/code', true)).toBe(true);
     expect(store.isExpanded('all:/srv/repo', false)).toBe(false);
   });
 
   it('remembers a collapse and an expand, each overriding the fallback', async () => {
     const store = new ExpansionStore(fakeMemento());
-    await store.set('section:pinned', false);
+    await store.set('folder:/srv/code', false);
     await store.set('all:/srv/repo', true);
-    expect(store.isExpanded('section:pinned', true)).toBe(false);
+    expect(store.isExpanded('folder:/srv/code', true)).toBe(false);
     expect(store.isExpanded('all:/srv/repo', false)).toBe(true);
   });
 
   it('keeps the latest choice when a row is toggled back', async () => {
     const store = new ExpansionStore(fakeMemento());
-    await store.set('section:recent', false);
-    await store.set('section:recent', true);
-    expect(store.isExpanded('section:recent', false)).toBe(true);
+    await store.set('repo:/srv/code/api', false);
+    await store.set('repo:/srv/code/api', true);
+    expect(store.isExpanded('repo:/srv/code/api', false)).toBe(true);
   });
 
   it('survives a new store over the same storage, which is what a new window is', async () => {
     const memento = fakeMemento();
-    await new ExpansionStore(memento).set('section:all', false);
-    expect(new ExpansionStore(memento).isExpanded('section:all', true)).toBe(false);
+    await new ExpansionStore(memento).set('root:/srv/code', false);
+    expect(new ExpansionStore(memento).isExpanded('root:/srv/code', true)).toBe(false);
   });
 
   it('does not write when the state is already what was stored', async () => {
     const memento = fakeMemento();
     const store = new ExpansionStore(memento);
-    await store.set('section:all', false);
+    await store.set('root:/srv/code', false);
     const before = memento.get('repodock.expansion');
-    await store.set('section:all', false);
+    await store.set('root:/srv/code', false);
     // the same object: an unchanged state must not cost a storage write per click
     expect(memento.get('repodock.expansion')).toBe(before);
   });

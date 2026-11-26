@@ -9,11 +9,10 @@ vi.mock('../../src/core/git', () => ({
 import { scanForRepos } from '../../src/core/scanner';
 import { activate, VIEW_ID, type RepoDockApi } from '../../src/ext/extension';
 import type { RepoModel } from '../../src/ext/repoModel';
-import { RepoDecorationProvider } from '../../src/ext/treeProvider';
 import { fakeExtensionContext } from './helpers/extensionContext';
 import { required } from './helpers/required';
 import { absPath, makeRepo } from './helpers/repoFixture';
-import { labelOf, sectionRows } from './helpers/sections';
+import { outline } from './helpers/provider';
 import { stubState as state, type StubTreeView } from './helpers/vscodeStub';
 
 const alpha = makeRepo({ path: '/srv/repos/alpha' });
@@ -37,16 +36,14 @@ beforeEach(() => {
 });
 
 describe('activation', () => {
-  it('creates the tree view and registers the row decoration', () => {
+  it('creates the tree view, and no file decoration, which would bring a file icon with it', () => {
     const api = activate(fakeExtensionContext());
     expect([...state.treeViews.keys()]).toEqual([VIEW_ID]);
     expect(treeView().options.treeDataProvider).toBe(api.provider);
-    expect(state.registerFileDecorationProvider).toHaveBeenCalledWith(
-      expect.any(RepoDecorationProvider),
-    );
+    expect(state.registerFileDecorationProvider).not.toHaveBeenCalled();
   });
 
-  it('offers Collapse All, since the sections and folders all fold', () => {
+  it('offers Collapse All, since the folders fold', () => {
     activate(fakeExtensionContext());
     expect(treeView().options.showCollapseAll).toBe(true);
   });
@@ -115,7 +112,7 @@ describe('the configuration listener', () => {
     expect(vi.mocked(scanForRepos).mock.calls.length).toBeGreaterThan(scans);
   });
 
-  it.each(['showNestedRepos', 'recentCount'])(
+  it.each(['showNestedRepos', 'layout'])(
     'only re-renders on %s, without touching the disk',
     async (key) => {
       const api = await activateWithAlpha();
@@ -227,6 +224,7 @@ describe('activation while the view opens', () => {
   });
 
   it('still records the current repo after a focus event mid-scan', async () => {
+    state.config.set('layout', 'recent');
     const { api, finishScan } = activateWithPendingScans();
     await state.fireWindowState(true);
 
@@ -234,9 +232,9 @@ describe('activation while the view opens', () => {
     await api.refresh();
 
     const item = api.provider.getTreeItem(
-      required(api.provider.findRepoElement(alpha.path, 'recent'), 'a Recent row for alpha'),
+      required(api.provider.findRepoElement(alpha.path), 'a row for alpha'),
     );
-    expect(item.description).toBe('now');
+    expect((item.tooltip as { value: string }).value).toContain('Last opened: just now');
   });
 
   it('keeps the scanning context set until every overlapping refresh has finished', async () => {
@@ -256,31 +254,30 @@ describe('activation while the view opens', () => {
 });
 
 describe('the current workspace', () => {
-  it('highlights the repo open in this window', async () => {
+  it('tells the repo open in this window apart in its tooltip only', async () => {
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
     const api = await activateWithAlpha();
 
-    for (const section of ['all', 'recent'] as const) {
-      const item = api.provider.getTreeItem(
-        required(api.provider.findRepoElement(alpha.path, section), `a ${section} row for alpha`),
-      );
-      expect((item.iconPath as { color?: unknown }).color).toBeDefined();
-    }
+    const item = api.provider.getTreeItem(
+      required(api.provider.findRepoElement(alpha.path), 'a row for alpha'),
+    );
+    expect(item.label).toBe('alpha');
+    expect((item.tooltip as { value: string }).value).toContain('open in this window');
   });
 
   it('records the repo this window sits in as recently opened', async () => {
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
+    state.config.set('layout', 'recent');
     const api = await activateWithAlpha();
 
-    // git state is mocked away, so the description is the last-opened time alone, and
-    // the row is in Recent at all only because the initial scan called recency.touch
+    // the tooltip has a last-opened time only because the initial scan called recency.touch
     const item = api.provider.getTreeItem(
-      required(api.provider.findRepoElement(alpha.path, 'recent'), 'a Recent row for alpha'),
+      required(api.provider.findRepoElement(alpha.path), 'a row for alpha'),
     );
-    expect(item.description).toBe('now');
+    expect((item.tooltip as { value: string }).value).toContain('Last opened: just now');
   });
 
-  it('re-renders after recording the current repo, so it appears at the top of Recent', async () => {
+  it('re-renders after recording the current repo, so the recent layout lists it first', async () => {
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
     state.config.set('directories', [absPath('/srv/repos')]);
     vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
@@ -304,15 +301,18 @@ describe('the current workspace', () => {
 
   it('leaves recency alone when this window is not in a scanned repo', async () => {
     state.workspaceFolders = [{ uri: { fsPath: absPath('/somewhere/else') } }];
+    state.config.set('layout', 'recent');
     const api = await activateWithAlpha();
 
-    expect(sectionRows(api.provider, 'recent')).toEqual([]);
-    expect(api.provider.findRepoElement(alpha.path)).toBeDefined();
+    const row = required(api.provider.findRepoElement(alpha.path), 'a row for alpha');
+    expect((api.provider.getTreeItem(row).tooltip as { value: string }).value).not.toContain(
+      'Last opened',
+    );
   });
 
-  it('never reveals or selects a row, which would scroll the sections out of view', async () => {
-    // the current repo heads Recent and is colored in every section, so it is already on
-    // screen; a reveal into All Repositories would scroll Pinned and Recent away
+  it('never reveals or selects a row, which would scroll the pinned repos out of view', async () => {
+    // the current repo is colored, and heads the recent layout; a reveal into the folder
+    // layout would scroll the pinned repos away and reopen folders the user had folded
     state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
     await activateWithAlpha();
     await treeView().fireVisibility(true);
@@ -332,46 +332,60 @@ describe('the current workspace', () => {
   });
 });
 
-describe('the section headings after activation', () => {
+describe('the rows after activation', () => {
   const beta = makeRepo({ path: '/srv/repos/beta' });
-  const headings = (api: RepoDockApi) =>
-    api.provider
-      .getChildren()
-      .map(
-        (node) =>
-          `${labelOf(api.provider, node)} ${String(api.provider.getTreeItem(node).description)}`,
-      );
 
-  it("list the window's own repo under Recent as soon as the first scan lands", async () => {
-    state.workspaceFolders = [{ uri: { fsPath: alpha.path } }];
+  async function activateWithBoth(): Promise<RepoDockApi> {
     state.config.set('directories', [absPath('/srv/repos')]);
     vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }, { ...beta }]);
     const api = activate(fakeExtensionContext());
     await api.refresh();
+    return api;
+  }
 
-    expect(headings(api)).toEqual(['Recent 1', 'All Repositories 2']);
+  it("list the window's own repo first in the recent layout as soon as the first scan lands", async () => {
+    state.workspaceFolders = [{ uri: { fsPath: beta.path } }];
+    state.config.set('layout', 'recent');
+    const api = await activateWithBoth();
+    expect(outline(api.provider)).toEqual(['beta', 'alpha']);
   });
 
-  it('gain and lose Pinned as a repo is pinned and unpinned through the commands', async () => {
-    const api = await activateWithAlpha();
-    const element = required(api.provider.findRepoElement(alpha.path), 'a row for alpha');
+  it('move a repo to the top as it is pinned, and back as it is unpinned', async () => {
+    const api = await activateWithBoth();
+    const element = required(api.provider.findRepoElement(beta.path), 'a row for beta');
     const run = (command: string) =>
       (required(state.commands.get(command), command) as (...args: unknown[]) => unknown)(element);
 
     await run('repodock.pinRepo');
-    expect(headings(api)).toEqual(['Pinned 1', 'All Repositories 1']);
+    expect(outline(api.provider)).toEqual(['beta', 'alpha']);
 
     await run('repodock.unpinRepo');
-    expect(headings(api)).toEqual(['All Repositories 1']);
+    expect(outline(api.provider)).toEqual(['alpha', 'beta']);
+  });
+
+  it('switch layout through the title-bar commands, and the context key follows', async () => {
+    state.workspaceFolders = [{ uri: { fsPath: beta.path } }];
+    const api = await activateWithBoth();
+    expect(state.contextKeys.get('repodock.layout')).toBe('folders');
+
+    await required(state.commands.get('repodock.showRecent'), 'showRecent')();
+    await state.fireConfigChange('layout');
+    expect(state.contextKeys.get('repodock.layout')).toBe('recent');
+    expect(outline(api.provider)).toEqual(['beta', 'alpha']);
+
+    await required(state.commands.get('repodock.showFolders'), 'showFolders')();
+    await state.fireConfigChange('layout');
+    expect(state.contextKeys.get('repodock.layout')).toBe('folders');
+    expect(outline(api.provider)).toEqual(['alpha', 'beta']);
   });
 
   it('all go once a rescan finds nothing, leaving the welcome text to show', async () => {
     const api = await activateWithAlpha();
-    expect(headings(api)).toEqual(['All Repositories 1']);
+    expect(outline(api.provider)).toEqual(['alpha']);
 
     vi.mocked(scanForRepos).mockResolvedValue([]);
     await api.refresh();
-    expect(headings(api)).toEqual([]);
+    expect(outline(api.provider)).toEqual([]);
   });
 });
 
@@ -379,13 +393,13 @@ describe('fold state across windows', () => {
   it('stores a collapse and an expand, and a later window renders them', async () => {
     const context = fakeExtensionContext();
     state.config.set('directories', [absPath('/srv/repos')]);
-    vi.mocked(scanForRepos).mockResolvedValue([{ ...alpha }]);
+    vi.mocked(scanForRepos).mockResolvedValue([makeRepo({ path: '/srv/repos/group/alpha' })]);
     const first = activate(context);
     await first.refresh();
-    const [heading] = first.provider.getChildren();
-    expect(first.provider.getTreeItem(required(heading, 'the heading')).collapsibleState).toBe(2);
+    const [folder] = first.provider.getChildren();
+    expect(first.provider.getTreeItem(required(folder, 'the folder')).collapsibleState).toBe(2);
 
-    await treeView().fireCollapse(heading);
+    await treeView().fireCollapse(folder);
 
     // a second activation over the same global state stands in for the window that
     // opens when the user switches to another repo
@@ -393,7 +407,7 @@ describe('fold state across windows', () => {
     const second = activate(context);
     await second.refresh();
     const [reopened] = second.provider.getChildren();
-    const item = () => second.provider.getTreeItem(required(reopened, 'the heading'));
+    const item = () => second.provider.getTreeItem(required(reopened, 'the folder'));
     expect(item().collapsibleState).toBe(1); // Collapsed
 
     await treeView().fireExpand(reopened);

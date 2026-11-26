@@ -9,7 +9,7 @@ Find every git repository inside the folders you add, and switch between them wi
 
 RepoDock scans the folders you choose and lists every repo it finds in a sidebar, with live git status. Clicking a row opens that repo.
 
-<img src="docs/screenshot.png" alt="The RepoDock sidebar: a Pinned section, a Recent section, and an All Repositories section that mirrors the folders on disk" width="348">
+<img src="docs/screenshot.png" alt="The RepoDock sidebar: pinned repos at the top, each with a pin, then the folders on disk with a dot before each repo name" width="348">
 
 ## Contents
 
@@ -25,16 +25,16 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 ## Features
 
 - Finds every git repo in the folders you add, including repos inside other repos (submodules, vendored checkouts). Symlinked subfolders are not followed, so add the real folder rather than a link to it.
-- Lists them in three sections of one tree in the Activity Bar:
-  - **Pinned** holds the repos you pin, so the ones you use daily stay at the top.
-  - **Recent** holds the repos you opened last, newest first, each with a compact `2h` timestamp.
-  - **All Repositories** mirrors the disk: scanned folder, subfolders, then repos. A repo nested inside another repo sits under it. A repo under two overlapping folders appears once, in the more specific one.
-- Shows the branch on every row, how far it is ahead of (↑) and behind (↓) its upstream, and a count of uncommitted files at the right edge. The tooltip adds the path and splits the count into modified and untracked.
+- Lists them in one tree in the Activity Bar:
+  - **Pinned repos** come first, by name, so the ones you use daily stay at the top. Each one shows a pin where other repos show a dot. Pinning moves a repo up rather than copying it.
+  - **Everything else** follows in one of two layouts, switched with the title-bar button:
+    - **Folders** (the default) mirrors the disk: scanned folder, subfolders, then repos. A repo nested inside another repo sits under it. A repo under two overlapping folders appears once, in the more specific one.
+    - **Recently opened** is one flat list, newest first. Repos you never opened follow, by name.
+- Keeps each row to a dot (or pin) and the repo name. Hover a repo for its path, branch, modified and untracked files, how far it is ahead of and behind its upstream, and when you last opened it.
 - Reloads git status and rescans the folders when the window regains focus, so a repo you cloned in a terminal appears without a manual refresh.
-- Highlights the repo that is open in the current window. It is always the first row of Recent.
-- Folds any section or folder, and remembers what you folded when you switch to another repo.
-- Leaves out a section that has nothing in it, so a new install shows only All Repositories.
-- Tells same-named repos apart: Pinned and Recent add the folder (`web-app (work)`, `web-app (personal)`), and All Repositories shows each under its own folder.
+- Marks the repo open in the current window by turning its dot (or pin) blue. In the recently opened layout it is also the first row below the pins.
+- Folds any folder, and remembers what you folded when you switch to another repo.
+- Tells same-named repos apart: the pinned repos and the recently opened list add the folder (`web-app (work)`, `web-app (personal)`), and the folder layout shows each under its own folder.
 - Hides the repos you never open.
 - Filters as you type once the tree has focus.
 - Makes no network requests, collects no telemetry, and ships no runtime dependencies. Paths and timestamps stay in VS Code's local storage.
@@ -77,6 +77,8 @@ To install without a registry, download the `.vsix` from any
 | Command                                           | Description                                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------- |
 | `RepoDock: Add Folder`, `RepoDock: Remove Folder` | Add or remove one scan folder directly (Add Folder is a title-bar button) |
+| `RepoDock: Show Recently Opened First`            | Switch to one flat list, newest first (title-bar button)                  |
+| `RepoDock: Show Folders`                          | Switch back to the folders on disk (title-bar button)                     |
 | `RepoDock: Refresh`                               | Rescan the folders and reload git state (title-bar button)                |
 | `RepoDock: Manage Folders`                        | List scan folders, remove one, or add another (title-bar `…` menu)        |
 | `RepoDock: Unhide All Repositories`               | Clear the hidden-repo list (title-bar `…` menu)                           |
@@ -94,7 +96,7 @@ Hovering a repo row shows two buttons: **Pin Repository** or **Unpin Repository*
 | `repodock.exclude`         | `["node_modules", "bower_components", ".Trash"]` | Directory names skipped while scanning            |
 | `repodock.hiddenRepos`     | `[]`                                             | Repos hidden via the context menu (`~` supported) |
 | `repodock.showNestedRepos` | `true`                                           | Show repos found inside another repo              |
-| `repodock.recentCount`     | `10`                                             | How many repos the Recent section lists (1 to 50) |
+| `repodock.layout`          | `"folders"`                                      | `"folders"` or `"recent"` (title-bar button)      |
 | `repodock.openInNewWindow` | `false`                                          | Open repos in a new window when clicked           |
 
 ## Contributing

@@ -23,10 +23,15 @@ export interface RepoDockConfig {
   /** Absolute paths of repositories hidden via the context menu. */
   hiddenRepos: string[];
   showNestedRepos: boolean;
-  /** How many repositories the Recent section lists at most. */
-  recentCount: number;
+  layout: Layout;
   openInNewWindow: boolean;
 }
+
+/**
+ * How the repos below the pinned ones are laid out: as the folders on disk, or as one list
+ * with the most recently opened first.
+ */
+export type Layout = 'folders' | 'recent';
 
 /**
  * Reads the current settings. Cheap and always live, so call it at the point of use
@@ -44,13 +49,12 @@ export function getConfig(): RepoDockConfig {
       .filter(isUsablePath)
       .map(expandPath),
     showNestedRepos: readBoolean(config.get<unknown>('showNestedRepos'), true),
-    recentCount: clampRecentCount(config.get<unknown>('recentCount')),
+    layout: config.get<unknown>('layout') === 'recent' ? 'recent' : 'folders',
     openInNewWindow: readBoolean(config.get<unknown>('openInNewWindow'), false),
   };
 }
 
 const DEFAULT_MAX_DEPTH = 4;
-const DEFAULT_RECENT_COUNT = 10;
 const DEFAULT_EXCLUDE = ['node_modules', 'bower_components', '.Trash'];
 
 /**
@@ -74,12 +78,6 @@ function readExclude(value: unknown): string[] {
 function clampMaxDepth(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_MAX_DEPTH;
   return Math.min(16, Math.max(1, Math.trunc(value)));
-}
-
-/** Holds `recentCount` to the 1 to 50 range the schema declares, which VS Code does not enforce. */
-function clampRecentCount(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_RECENT_COUNT;
-  return Math.min(50, Math.max(1, Math.trunc(value)));
 }
 
 /** Falls back to the default for a non-boolean, so a stored `"false"` does not read as on. */
@@ -260,4 +258,14 @@ export function unhideAllRepos(): Promise<void> {
       await config.update('hiddenRepos', undefined, scope);
     }
   });
+}
+
+/**
+ * Switches the view's layout, in the scope whose value is in effect (see `effectiveTarget`).
+ * The write fires the configuration listener in `extension.ts`, which redraws the view and
+ * updates the `repodock.layout` context key that picks the title-bar toggle.
+ */
+export async function setLayout(layout: Layout): Promise<void> {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  await config.update('layout', layout, effectiveTarget(config, 'layout'));
 }

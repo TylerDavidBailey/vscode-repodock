@@ -58,9 +58,9 @@ registry without failing the release.
 
 ## Architecture
 
-`src/core` holds the scanner, the git porcelain parsing, the labelling and section lists,
+`src/core` holds the scanner, the git porcelain parsing, the labelling, pinned and recency ordering,
 and the builder that arranges repos into the folder tree. It is plain Node with no VS Code
 dependency. `src/ext` wires that core into the VS Code API: `repoModel.ts` owns scanning
-and git state, `treeProvider.ts` renders the sidebar's three sections from it,
+and git state, `treeProvider.ts` renders the sidebar from it,
 `folderPicker.ts` the Manage Folders picker, and `commands.ts` registers the commands.
 `extension.ts` composes all of it in `activate()`.

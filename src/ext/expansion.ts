@@ -3,7 +3,7 @@ import type * as vscode from 'vscode';
 const KEY = 'repodock.expansion';
 
 /**
- * Enough for every section, folder, and repo a user is likely to have folded by hand. Past
+ * Enough for every folder and repo a user is likely to have folded by hand. Past
  * it the oldest entries go, and those rows fall back to their default state.
  */
 const MAX_ENTRIES = 500;
@@ -14,7 +14,7 @@ const NO_STATES: Readonly<Record<string, boolean>> = {};
 /**
  * Which rows the user has expanded or collapsed, by tree item id, persisted in global
  * storage. VS Code keeps a tree's fold state for the life of a window only, and opening a
- * repository replaces the window's workspace: without this, a section folded away would
+ * repository replaces the window's workspace: without this, a folder folded away would
  * be open again after every switch.
  *
  * Only rows the user toggled are stored, so a row never touched keeps following its default.
