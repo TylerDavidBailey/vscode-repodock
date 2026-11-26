@@ -40,7 +40,7 @@ export function labelOf(provider: RepoTreeProvider, node: TreeNode): string {
 
 /**
  * Rows as indented labels, the way the view draws them, from a fresh render unless `nodes`
- * is given. The gap row reads as an empty string.
+ * is given.
  */
 export function outline(
   provider: RepoTreeProvider,

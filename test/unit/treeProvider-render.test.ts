@@ -188,14 +188,27 @@ describe('the repo row', () => {
     expect(itemFor(sections, alpha.path).description).toBeUndefined();
   });
 
-  it('carries a dim dot, pinned or not', async () => {
+  it('carries a dim dot, or a dim pin once pinned', async () => {
     const sections = await render([alpha]);
     expect(iconOf(itemFor(sections, alpha.path))).toMatchObject({
       id: 'circle-small-filled',
       color: { id: 'descriptionForeground' },
     });
     await sections.pins.pin(alpha.path);
-    expect(iconOf(itemFor(sections, alpha.path))?.color?.id).toBe('descriptionForeground');
+    expect(iconOf(itemFor(sections, alpha.path))).toMatchObject({
+      id: 'pinned',
+      color: { id: 'descriptionForeground' },
+    });
+  });
+
+  it('turns the pin blue when the pinned repo is the one open in this window', async () => {
+    const sections = await render([alpha]);
+    await sections.pins.pin(alpha.path);
+    sections.model.setCurrentRepos([alpha.path]);
+    expect(iconOf(itemFor(sections, alpha.path))).toMatchObject({
+      id: 'pinned',
+      color: { id: 'charts.blue' },
+    });
   });
 
   it('turns the dot blue for the repo open in this window, and sets no resourceUri', async () => {

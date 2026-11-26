@@ -2,8 +2,8 @@
 
 RepoDock is a VS Code extension. It scans configured folders for git repositories and
 switches between them through a tree view in the Activity Bar. Pinned repos come first,
-then a blank gap row, then every other repo, laid out as the folders on disk or as one
-list with the most recently opened first (`repodock.layout`). README.md holds the
+each marked with a pin, then every other repo, marked with a dot and laid out as the
+folders on disk or as one list with the most recently opened first (`repodock.layout`). README.md holds the
 user-facing docs. This file covers what those docs leave out.
 
 ## Commands
@@ -97,12 +97,15 @@ Follows the TSDoc spec and the Microsoft TypeScript and VS Code coding guideline
 - Pinned repos and the rest are rows of one tree, not separate views. VS Code gives each
   view in a container a minimum body height of about 120px and splits the sidebar between
   them, so a two-row Pinned view sat above a block of empty space. Do not split them out.
-  An earlier version also put them under Pinned / Recent / All Repositories headings;
-  those were dropped as noise in favor of the gap row.
+  Earlier versions put them under Pinned / Recent / All Repositories headings, and then
+  split them with a blank row; both read as noise. The pin icon on each pinned row is now
+  all that marks the group, and it costs no height.
 - A repo has exactly one row: pinning moves it to the top. Its id still changes
   (`pinned:` instead of `repo:`), so VS Code sees one row leave and another arrive rather
-  than a row change parents. The gap row is a real, focusable row with an empty label,
-  because a tree item cannot be spacing alone; it carries an accessibility label instead.
+  than a row change parents.
+- Every repo row has a codicon (a pin or a dot, blue for the repo open in this window)
+  and no resourceUri. A row with a resourceUri and no icon of its own gets the file-icon
+  theme's icon, which is why the current repo is not marked by coloring its label.
 - VS Code forgets a tree's fold state when the window's workspace changes, which is what
   opening a repo does. `ExpansionStore` keeps it in global state, keyed by row id.
 - Do not call `TreeView.reveal` on this tree. Before VS Code 1.148 (seen in VSCodium

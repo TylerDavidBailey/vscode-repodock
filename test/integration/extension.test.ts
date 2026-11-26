@@ -240,10 +240,11 @@ describe('RepoDock', () => {
     }
   });
 
-  it('moves a pinned repo to the top, past a gap, until it is unpinned', async () => {
+  it('moves a pinned repo to the top, marked with a pin, until it is unpinned', async () => {
     await vscode.commands.executeCommand('repodock.pinRepo', rowFor('alpha', 'vendor'));
-    assert.deepStrictEqual(outline(), ['vendor', '', 'group/sub', '  beta', 'alpha']);
+    assert.deepStrictEqual(outline(), ['vendor', 'group/sub', '  beta', 'alpha']);
     assert.strictEqual(itemFor('alpha', 'vendor').contextValue, 'repoNested-pinned');
+    assert.strictEqual((itemFor('alpha', 'vendor').iconPath as vscode.ThemeIcon).id, 'pinned');
 
     // unpinned from its own row, the way the row button does it
     await vscode.commands.executeCommand('repodock.unpinRepo', rowFor('alpha', 'vendor'));

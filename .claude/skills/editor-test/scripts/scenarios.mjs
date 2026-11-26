@@ -6,8 +6,8 @@
 //   kind 'edge'    unusual input, unusual state, or a failure the UI has to survive
 //
 // A scenario's `run(ui, assert, P)` gets the UI helpers, node's strict assert, and the
-// names of the tree's two parts: the pinned repos above the gap row, and the rest below
-// it. Assert through `ui.eventually`, because every update reaches the view
+// names of the tree's two parts: the pinned repos at the top, each marked with a pin,
+// and the rest below them. Assert through `ui.eventually`, because every update reaches the view
 // asynchronously, and end with `ui.shot(id)` when the state is worth a picture.
 
 import * as fs from 'node:fs';
@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 const PINNED = ['infrastructure', 'payments-api'];
 
 /**
- * The folder layout below the gap under the base settings, as [level, label] rows. The two
+ * The folder layout below the pins under the base settings, as [level, label] rows. The two
  * pinned repos have moved up, out of services/ and ~/work.
  */
 const FOLDER_TREE = [
@@ -45,7 +45,7 @@ const FOLDER_TREE = [
 ];
 
 /**
- * The recent layout below the gap under the base settings: the seeded last-opened times,
+ * The recent layout below the pins under the base settings: the seeded last-opened times,
  * newest first, then the repos never opened, by name.
  */
 const RECENT_LIST = [
@@ -99,27 +99,23 @@ export const scenarios = [
   {
     id: 'sidebar',
     kind: 'normal',
-    title: 'Pinned repos lead, one blank row follows, then the folders, all one row apart',
+    title: 'Pinned repos lead, each with a pin, and the folders follow straight after',
     async run(ui, assert, P) {
       await ui.eventually(async () => {
         const tree = await ui.tree();
         assert.deepEqual(
-          tree.slice(0, 4).map((row) => [row.level, row.label]),
+          tree.slice(0, 3).map((row) => [row.level, row.label, row.icon]),
           [
-            [1, 'infrastructure'],
-            [1, 'payments-api'],
-            [1, ''],
-            [1, '~/projects'],
+            [1, 'infrastructure', 'pinned'],
+            [1, 'payments-api', 'pinned'],
+            [1, '~/projects', ''],
           ],
         );
-        // the gap is one ordinary row high: no section takes more height than its rows
+        // every row is one row high: no blank row or heading sits between the two groups
         const rowHeight = tree[1].top - tree[0].top;
         for (const [index, row] of tree.entries()) {
           if (index > 0) assert.equal(row.top - tree[index - 1].top, rowHeight, row.label);
         }
-        const gap = await ui.gap();
-        assert.equal(gap.description, '');
-        assert.equal(gap.expanded, null);
         await expectTree(ui, assert, FOLDER_TREE, P.rest);
       });
       await ui.shot('sidebar', { sidebarOnly: true });
@@ -128,7 +124,7 @@ export const scenarios = [
   {
     id: 'pinned-repos',
     kind: 'normal',
-    title: 'Pinned repos are listed by name with branch and sync arrows, above the gap',
+    title: 'Pinned repos are listed by name at the top, each marked with a pin',
     async run(ui, assert, P) {
       await ui.eventually(async () => {
         await expectTree(
@@ -146,7 +142,7 @@ export const scenarios = [
   {
     id: 'folder-layout',
     kind: 'normal',
-    title: 'Below the gap the folder layout mirrors the disk: scan folder, folders, then repos',
+    title: 'Below the pins the folder layout mirrors the disk: scan folder, folders, then repos',
     async run(ui, assert, P) {
       // Compared row by row on purpose. VSCodium 1.143 once drew the rows of services/
       // under ~/work here, when the extension revealed a row while the tree was loading.
@@ -171,7 +167,7 @@ export const scenarios = [
   {
     id: 'row-marks',
     kind: 'normal',
-    title: 'Every repo row is a dot and a name; folders and the gap carry no icon or text',
+    title: 'Every repo row is a dot or a pin and a name; folders carry no icon or text',
     async run(ui, assert) {
       const folders = [
         '~/projects',
@@ -186,10 +182,11 @@ export const scenarios = [
         const tree = await ui.tree();
         assert.ok(tree.length > 10);
         for (const row of tree) {
-          const isRepo = row.label !== '' && !folders.includes(row.label);
-          // a dot, not a file icon: VS Code draws the file-icon theme's icon on a row
+          const isRepo = !folders.includes(row.label);
+          const mark = PINNED.includes(row.label) ? 'pinned' : 'circle-small-filled';
+          // a codicon, not a file icon: VS Code draws the file-icon theme's icon on a row
           // that has a resourceUri and no icon of its own
-          assert.equal(row.icon, isRepo ? 'circle-small-filled' : '', row.label);
+          assert.equal(row.icon, isRepo ? mark : '', row.label);
           assert.equal(row.hasIcon, isRepo, row.label);
           assert.equal(row.description, '', row.label);
           assert.equal(row.badge, '', row.label);
@@ -260,25 +257,18 @@ export const scenarios = [
     },
   },
   {
-    id: 'folder-and-gap-rows',
+    id: 'folder-rows',
     kind: 'normal',
-    title: 'Folder rows and the gap row offer no repo actions: no buttons, no repo menu',
+    title: 'Folder rows offer no repo actions: no buttons, no repo menu',
     async run(ui, assert) {
       await ui.eventually(async () => assert.ok(await find(ui, 'web')));
       const menu = () =>
         ui.page.locator('.context-view .monaco-menu .action-label').allInnerTexts();
-      for (const label of ['web', '']) {
-        assert.deepEqual(await ui.rowButtons(label), [], `buttons on "${label}"`);
-        await (await ui.row(label)).click({ button: 'right' });
-        // the menu VS Code may show is its own; none of ours may be on it
-        assert.ok(!(await menu()).some((item) => /Repository|Open in/.test(item)), label);
-        await ui.dismiss();
-      }
-      // clicking the gap opens nothing
-      const title = await ui.page.title();
-      await (await ui.row('')).click();
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      assert.equal(await ui.page.title(), title);
+      assert.deepEqual(await ui.rowButtons('web'), []);
+      await (await ui.row('web')).click({ button: 'right' });
+      // the menu VS Code may show is its own; none of ours may be on it
+      assert.ok(!(await menu()).some((item) => /Repository|Open in/.test(item)));
+      await ui.dismiss();
     },
   },
   {
@@ -302,7 +292,7 @@ export const scenarios = [
   {
     id: 'pin-unpin',
     kind: 'normal',
-    title: 'Pinning moves a repo above the gap; unpinning puts it back in its folder',
+    title: 'Pinning moves a repo to the top with a pin; unpinning puts it back in its folder',
     async run(ui, assert, P) {
       await ui.eventually(async () => assert.ok(await find(ui, 'reporting-api')));
       await ui.clickRowButton('reporting-api', 'Pin Repository');
@@ -421,7 +411,6 @@ export const scenarios = [
         assert.deepEqual(await ui.labels(), [
           'infrastructure',
           'payments-api',
-          '',
           '~/projects',
           '~/work',
         ]);
@@ -565,7 +554,7 @@ export const scenarios = [
     title: 'Switching branch in a terminal shows the new branch in the tooltip after Refresh',
     async run(ui, assert, P) {
       const repo = ui.fixture('projects/web/playground');
-      // the second playground below the gap is the one under web/
+      // the second playground below the pins is the one under web/
       const branchOf = async () =>
         /Branch: (\S+)/.exec(await tooltipOf(ui, 'playground', P.rest, 1))?.[1];
       await ui.eventually(() => expectTree(ui, assert, FOLDER_TREE, P.rest));
@@ -637,7 +626,7 @@ export const scenarios = [
   {
     id: 'empty-no-repos',
     kind: 'edge',
-    title: 'A folder with no repos gets the "none found" message, and no stray gap row',
+    title: 'A folder with no repos gets the "none found" message, and no stray rows',
     settings: { 'repodock.directories': ['~/empty'] },
     async run(ui, assert) {
       await ui.eventually(async () => {
@@ -651,22 +640,23 @@ export const scenarios = [
     },
   },
   {
-    id: 'no-pins-no-gap',
+    id: 'no-pins',
     kind: 'edge',
-    title: 'With nothing pinned there is no gap row: the tree starts with the folders',
+    title: 'With nothing pinned the tree starts with the folders, and no row has a pin',
     settings: { 'repodock.directories': ['~/edge'] },
     async run(ui, assert) {
       await ui.eventually(async () => {
         // nothing under ~/edge is pinned
-        assert.equal(await ui.gap(), undefined);
-        assert.equal((await ui.tree())[0].label, 'deep/a/b');
+        const tree = await ui.tree();
+        assert.equal(tree[0].label, 'deep/a/b');
+        assert.ok(!tree.some((row) => row.icon === 'pinned'));
       });
     },
   },
   {
     id: 'everything-pinned',
     kind: 'edge',
-    title: 'With every repo pinned there is no gap row below the pins',
+    title: 'With every repo pinned the view is the pins alone, and unpinning restores folders',
     settings: { 'repodock.directories': ['~/work'] },
     async run(ui, assert, P) {
       await ui.eventually(async () => assert.ok(await find(ui, 'client-portal')));
@@ -678,7 +668,7 @@ export const scenarios = [
       try {
         await ui.eventually(async () => {
           assert.deepEqual(await ui.labels(), ['client-portal', 'infrastructure', 'reporting-api']);
-          assert.equal(await ui.gap(), undefined);
+          assert.ok((await ui.tree()).every((row) => row.icon === 'pinned'));
         });
       } finally {
         for (const label of ['client-portal', 'reporting-api']) {
@@ -688,7 +678,6 @@ export const scenarios = [
       await ui.eventually(async () => {
         assert.deepEqual(await ui.labels(), [
           'infrastructure',
-          '',
           'clients',
           'client-portal',
           'reporting-api',
@@ -787,7 +776,7 @@ export const scenarios = [
       await ui.eventually(async () =>
         assert.ok((await ui.labels(P.pinned)).includes('playground')),
       );
-      // the other one is now the only playground below the gap
+      // the other one is now the only playground below the pins
       await ui.clickRowButton('playground', 'Pin Repository', P.rest, 0);
       await ui.eventually(async () => {
         // name order, with the path settling the tie: tools/experiments sorts ahead of web
@@ -911,8 +900,8 @@ export const scenarios = [
     },
     async run(ui, assert) {
       await ui.eventually(async () => {
-        // maxDepth clamps to 1, so only the repo directly inside ~/work is found. It is
-        // pinned, and with nothing below it there is no gap.
+        // maxDepth clamps to 1, so only the repo directly inside ~/work is found: the pinned
+        // infrastructure.
         assert.deepEqual(await ui.labels(), ['infrastructure']);
         // an unknown layout reads as folders, so the toggle offers the other one
         assert.equal((await ui.titleButtons())[0], 'Show Recently Opened First');

@@ -9,7 +9,7 @@ Find every git repository inside the folders you add, and switch between them wi
 
 RepoDock scans the folders you choose and lists every repo it finds in a sidebar, with live git status. Clicking a row opens that repo.
 
-<img src="docs/screenshot.png" alt="The RepoDock sidebar: pinned repos at the top, a blank row, then the folders on disk with a dot before each repo name" width="348">
+<img src="docs/screenshot.png" alt="The RepoDock sidebar: pinned repos at the top, each with a pin, then the folders on disk with a dot before each repo name" width="348">
 
 ## Contents
 
@@ -26,13 +26,13 @@ RepoDock scans the folders you choose and lists every repo it finds in a sidebar
 
 - Finds every git repo in the folders you add, including repos inside other repos (submodules, vendored checkouts). Symlinked subfolders are not followed, so add the real folder rather than a link to it.
 - Lists them in one tree in the Activity Bar:
-  - **Pinned repos** come first, by name, so the ones you use daily stay at the top. Pinning moves a repo up rather than copying it, and a blank row separates the pins from the rest.
+  - **Pinned repos** come first, by name, so the ones you use daily stay at the top. Each one shows a pin where other repos show a dot. Pinning moves a repo up rather than copying it.
   - **Everything else** follows in one of two layouts, switched with the title-bar button:
     - **Folders** (the default) mirrors the disk: scanned folder, subfolders, then repos. A repo nested inside another repo sits under it. A repo under two overlapping folders appears once, in the more specific one.
     - **Recently opened** is one flat list, newest first. Repos you never opened follow, by name.
-- Keeps each row to a dot and the repo name. Hover a repo for its path, branch, modified and untracked files, how far it is ahead of and behind its upstream, and when you last opened it.
+- Keeps each row to a dot (or pin) and the repo name. Hover a repo for its path, branch, modified and untracked files, how far it is ahead of and behind its upstream, and when you last opened it.
 - Reloads git status and rescans the folders when the window regains focus, so a repo you cloned in a terminal appears without a manual refresh.
-- Marks the repo open in the current window with a blue dot. In the recently opened layout it is also the first row below the pins.
+- Marks the repo open in the current window by turning its dot (or pin) blue. In the recently opened layout it is also the first row below the pins.
 - Folds any folder, and remembers what you folded when you switch to another repo.
 - Tells same-named repos apart: the pinned repos and the recently opened list add the folder (`web-app (work)`, `web-app (personal)`), and the folder layout shows each under its own folder.
 - Hides the repos you never open.

@@ -82,9 +82,9 @@ Scenario style, so the catalog stays uniform:
 - `title` is one sentence stating the expected behavior. It is what the report shows.
 - Wrap every assertion about the UI in `ui.eventually`. Scans, git loads, and settings
   reloads all land asynchronously.
-- Read rows with `ui.rows(part)`: `P.pinned` is the rows above the blank gap row, `P.rest`
-  the rows below it, and no part is the whole tree. `ui.gap()` finds the gap row. `ui.row()`
-  is async: it finds the row in the tree as it is at that moment.
+- Read rows with `ui.rows(part)`: `P.pinned` is the run of pin-marked rows at the top,
+  `P.rest` the rows after it, and no part is the whole tree. `ui.row()` is async: it finds
+  the row in the tree as it is at that moment.
 - Assert exact text with `assert.deepEqual` or `assert.equal` where the text is fixed, and
   a regular expression only where it legitimately varies (hashes, relative times).
 - Put per-scenario configuration in `settings`. The runner resets to the base settings

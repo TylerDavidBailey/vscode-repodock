@@ -350,14 +350,14 @@ describe('the rows after activation', () => {
     expect(outline(api.provider)).toEqual(['beta', 'alpha']);
   });
 
-  it('move a repo to the top, past a gap, as it is pinned and back as it is unpinned', async () => {
+  it('move a repo to the top as it is pinned, and back as it is unpinned', async () => {
     const api = await activateWithBoth();
     const element = required(api.provider.findRepoElement(beta.path), 'a row for beta');
     const run = (command: string) =>
       (required(state.commands.get(command), command) as (...args: unknown[]) => unknown)(element);
 
     await run('repodock.pinRepo');
-    expect(outline(api.provider)).toEqual(['beta', '', 'alpha']);
+    expect(outline(api.provider)).toEqual(['beta', 'alpha']);
 
     await run('repodock.unpinRepo');
     expect(outline(api.provider)).toEqual(['alpha', 'beta']);

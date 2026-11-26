@@ -84,7 +84,7 @@ describe('opening a repository', () => {
     expect(rebuildViews).toHaveBeenCalledTimes(1);
   });
 
-  it('does nothing for a folder row, the gap row, or no row at all', async () => {
+  it('does nothing for a folder row or no row at all', async () => {
     const folder: TreeNode = {
       kind: 'folder',
       path: CODE,
@@ -93,7 +93,6 @@ describe('opening a repository', () => {
       children: [],
     };
     await run('repodock.open', folder);
-    await run('repodock.open', { kind: 'gap', children: [] });
     await run('repodock.open');
     expect(lastExecute('vscode.openFolder')).toBeUndefined();
     expect(recency.all().size).toBe(0);

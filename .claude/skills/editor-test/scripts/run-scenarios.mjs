@@ -151,8 +151,8 @@ async function seedGlobalState(profile) {
 }
 
 /**
- * The two parts of RepoDock's tree, as scenarios name them: the pinned repos above the
- * blank gap row, and the rest below it.
+ * The two parts of RepoDock's tree, as scenarios name them: the pinned repos at the top,
+ * each marked with a pin, and the rest below them.
  */
 export const PARTS = { pinned: 'pinned', rest: 'rest' };
 
@@ -160,8 +160,7 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * The helpers a scenario drives the editor with. Everything reads the live DOM. Helpers
- * that take a `part` look at the rows above or below the gap row, and default to the
- * whole tree.
+ * that take a `part` look at the pinned rows or the rest, and default to the whole tree.
  */
 function createUi(page, editorId, profile) {
   const settingsFile = path.join(profile, 'User', 'settings.json');
@@ -201,7 +200,7 @@ function createUi(page, editorId, profile) {
     },
 
     /**
-     * Every rendered row of the view, top to bottom, the gap row included. Only rows
+     * Every rendered row of the view, top to bottom. Only rows
      * scrolled into view exist. `index` is the row's position in the whole tree. `badge` is
      * the count at the right edge of the row and `color` the label's computed color: both
      * come from a file decoration, which VS Code draws with CSS rather than text.
@@ -243,20 +242,16 @@ function createUi(page, editorId, profile) {
           });
       }, rowSelector),
 
-    /** The blank row between the pinned repos and the rest, or undefined when there is none. */
-    gap: async () => (await ui.tree()).find((row) => row.level === 1 && row.label === ''),
-
     /**
-     * The rows of one part of the tree, top to bottom, or every row without a `part`.
-     * Without a gap row there is nothing to split on: every row counts as the rest, and
-     * the pinned part is empty, which is right whenever something is left unpinned.
+     * The rows of one part of the tree, top to bottom, or every row without a `part`. The
+     * pinned part is the run of pinned rows at the top, told apart by their pin icon.
      */
     async rows(part) {
       const tree = await ui.tree();
       if (part === undefined) return tree;
-      const gap = tree.findIndex((row) => row.level === 1 && row.label === '');
-      if (part === PARTS.pinned) return gap === -1 ? [] : tree.slice(0, gap);
-      return gap === -1 ? tree : tree.slice(gap + 1);
+      const end = tree.findIndex((row) => row.icon !== 'pinned');
+      const split = end === -1 ? tree.length : end;
+      return part === PARTS.pinned ? tree.slice(0, split) : tree.slice(split);
     },
 
     labels: async (part) => (await ui.rows(part)).map((row) => row.label),

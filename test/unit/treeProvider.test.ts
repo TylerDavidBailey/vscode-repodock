@@ -44,7 +44,7 @@ async function render(
   return rendered;
 }
 
-/** The top-level rows' labels, from a fresh render. The gap row reads as ''. */
+/** The top-level rows' labels, from a fresh render. */
 const topLabels = (provider: RepoTreeProvider) =>
   provider.getChildren().map((node) => labelOf(provider, node));
 
@@ -173,11 +173,11 @@ describe('the recent layout', () => {
 });
 
 describe('pinned repos', () => {
-  it('lead the list by name, wherever they live, with a gap before the rest', async () => {
+  it('lead the list by name, wherever they live, with no row between them and the rest', async () => {
     const { provider, pins } = await render([web, api, portal]);
     await pins.pin(portal.path);
     await pins.pin(api.path);
-    expect(outline(provider)).toEqual(['api', 'portal', '', 'frontend', '  web']);
+    expect(outline(provider)).toEqual(['api', 'portal', 'frontend', '  web']);
   });
 
   it('lead the recent layout too, ahead of a repo opened more recently', async () => {
@@ -185,7 +185,7 @@ describe('pinned repos', () => {
     const { provider, pins, recency } = await render([web, api, portal]);
     await pins.pin(api.path);
     await openInOrder(recency, [api, web]);
-    expect(topLabels(provider)).toEqual(['api', '', 'web', 'portal']);
+    expect(topLabels(provider)).toEqual(['api', 'web', 'portal']);
   });
 
   it('move rather than copy: a pinned repo has one row', async () => {
@@ -194,19 +194,13 @@ describe('pinned repos', () => {
     expect(outline(provider).filter((label) => label.trim() === 'api')).toEqual(['api']);
   });
 
-  it('take no gap when nothing else is left to list', async () => {
-    const { provider, pins } = await render([web]);
-    await pins.pin(web.path);
-    expect(outline(provider)).toEqual(['web']);
-  });
-
   it('show no nested repos under them; those stay below, placed by their folders', async () => {
     const { provider, pins } = await render([gateway, sdk]);
     await pins.pin(gateway.path);
     const [row] = provider.getChildren();
     expect(provider.getChildren(required(row, 'a pinned row'))).toEqual([]);
     expect(provider.getTreeItem(required(row, 'a pinned row')).collapsibleState).toBe(0);
-    expect(outline(provider)).toEqual(['gateway', '', 'services/gateway/vendor', '  sdk']);
+    expect(outline(provider)).toEqual(['gateway', 'services/gateway/vendor', '  sdk']);
   });
 
   it('are told apart by folder when two share a name', async () => {
@@ -225,7 +219,7 @@ describe('pinned repos', () => {
 
     state.config.set('hiddenRepos', []);
     await model.refresh();
-    expect(outline(provider)).toEqual(['api', '', 'frontend', '  web']);
+    expect(outline(provider)).toEqual(['api', 'frontend', '  web']);
   });
 
   it('drop a pinned nested repo while nested repos are turned off', async () => {
@@ -234,23 +228,6 @@ describe('pinned repos', () => {
     expect(topLabels(provider)[0]).toBe('sdk');
     state.config.set('showNestedRepos', false);
     expect(outline(provider)).toEqual(['services', '  gateway']);
-  });
-});
-
-describe('the gap row', () => {
-  it('is blank, unclickable, out of the repo menus, and named for screen readers', async () => {
-    const { provider, pins } = await render([web, api]);
-    await pins.pin(api.path);
-    const gap = required(provider.getChildren()[1], 'the gap row');
-    expect(gap.kind).toBe('gap');
-    const item = provider.getTreeItem(gap);
-    expect(item.label).toBe('');
-    expect(item.id).toBe('gap');
-    expect(item.collapsibleState).toBe(0);
-    expect(item.command).toBeUndefined();
-    expect(item.contextValue).toBeUndefined();
-    expect(item.accessibilityInformation?.label).toBe('End of pinned repositories');
-    expect(provider.getChildren(gap)).toEqual([]);
   });
 });
 

@@ -9,18 +9,12 @@ import type { RecencyStore } from './recency';
 import type { RepoModel } from './repoModel';
 import { getConfig, tildify } from './settings';
 
-/** The blank row between the pinned repos and the rest, which is all that marks where pins end. */
-export interface GapNode {
-  kind: 'gap';
-  children: [];
-}
-
 /** A row in the RepoDock view; narrow on `kind`. */
-export type TreeNode = GapNode | RepoTreeNode;
+export type TreeNode = RepoTreeNode;
 
 /**
- * Backs the RepoDock view: pinned repos first, by name, then a blank row, then every other
- * repo, laid out as `repodock.layout` says. The folder layout mirrors the disk, and the
+ * Backs the RepoDock view: pinned repos first, by name, then every other repo, laid out as
+ * `repodock.layout` says. The folder layout mirrors the disk, and the
  * recent layout is one list with the most recently opened first.
  *
  * Identity matters: commands receive the element of the row they were invoked on, so the
@@ -70,7 +64,6 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
   }
 
   getTreeItem(node: TreeNode): vscode.TreeItem {
-    if (node.kind === 'gap') return this.gapItem(node);
     return node.kind === 'repo' ? this.repoItem(node) : this.folderItem(node);
   }
 
@@ -82,7 +75,6 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
    * leaving and another arriving, rather than one row jumping to a new parent.
    */
   idOf(node: TreeNode): string {
-    if (node.kind === 'gap') return 'gap';
     if (node.kind === 'folder') return `${node.isRoot ? 'root' : 'folder'}:${node.path}`;
     return `${this.pinnedRows.has(node) ? 'pinned' : 'repo'}:${node.repo.path}`;
   }
@@ -137,10 +129,9 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
     }
     for (const node of rest) this.index(node);
     // With no repos at all there are no rows, which is what brings up the welcome text in
-    // package.json. The gap only separates two groups, so it goes when either is empty.
-    const gap: GapNode[] =
-      pinned.length > 0 && rest.length > 0 ? [{ kind: 'gap', children: [] }] : [];
-    this.roots = [...pinned, ...gap, ...rest];
+    // package.json. No row separates the two groups: an empty one reads as a glitch, and
+    // the pin each pinned row carries already marks where they end.
+    this.roots = [...pinned, ...rest];
     return this.roots;
   }
 
@@ -150,15 +141,6 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
       this.repoNodes.set(canonicalPathKey(node.repo.path), node);
     }
     for (const child of node.children) this.index(child, node);
-  }
-
-  private gapItem(node: GapNode): vscode.TreeItem {
-    const item = new vscode.TreeItem('', vscode.TreeItemCollapsibleState.None);
-    item.id = this.idOf(node);
-    // a screen reader would otherwise announce an empty row
-    item.accessibilityInformation = { label: 'End of pinned repositories' };
-    // deliberately no contextValue: the /^repo/ menus in package.json must skip it
-    return item;
   }
 
   private folderItem(node: FolderNode): vscode.TreeItem {
@@ -186,13 +168,14 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsco
       node.children.length > 0 ? this.foldState(node, false) : vscode.TreeItemCollapsibleState.None,
     );
     item.id = this.idOf(node);
-    // A dot on every repo tells repos from folders, and a blue one marks the repo open in
-    // this window. Coloring the label instead would need a resourceUri, and VS Code draws
-    // the file-icon theme's icon on a row with a resourceUri and no icon of its own; a
-    // label highlight draws as a find-match box. The row shows the name alone: branch,
-    // upstream distance, changes, and last-opened time are all in the tooltip.
+    // Every repo carries a mark, which tells repos from folders: a pin for a pinned repo, a
+    // dot for the rest, blue for the repo open in this window. Coloring the label instead
+    // would need a resourceUri, and VS Code draws the file-icon theme's icon on a row with
+    // a resourceUri and no icon of its own; a label highlight draws as a find-match box.
+    // The row shows the name alone: branch, upstream distance, changes, and last-opened
+    // time are all in the tooltip.
     item.iconPath = new vscode.ThemeIcon(
-      'circle-small-filled',
+      isPinned ? 'pinned' : 'circle-small-filled',
       new vscode.ThemeColor(isCurrent ? 'charts.blue' : 'descriptionForeground'),
     );
     item.tooltip = repoTooltip(repo, state, openedAt, isCurrent, isPinned);
