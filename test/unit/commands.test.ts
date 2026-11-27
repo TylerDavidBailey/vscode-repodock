@@ -146,6 +146,45 @@ describe('opening a repository that is no longer on disk', () => {
   });
 });
 
+describe('switching layout in a window updated without a reload', () => {
+  beforeEach(() => {
+    // the window still holds a schema from before 1.3.0, which added repodock.layout
+    state.unregisteredKeys.add('layout');
+  });
+
+  it.each(['repodock.showRecent', 'repodock.showFolders'])(
+    "%s offers a reload instead of failing with the editor's error",
+    async (command) => {
+      await expect(run(command)).resolves.toBeUndefined();
+
+      expect(state.showWarningMessage).toHaveBeenCalledWith(
+        'RepoDock was updated. Reload the window to finish the update, then switch layouts.',
+        'Reload Window',
+      );
+      expect(state.config.has('layout')).toBe(false);
+    },
+  );
+
+  it('reloads the window when the user takes the offer', async () => {
+    state.showWarningMessage.mockResolvedValue('Reload Window');
+    await run('repodock.showRecent');
+    expect(lastExecute('workbench.action.reloadWindow')).toBeDefined();
+  });
+
+  it('leaves the window alone when the user dismisses the offer', async () => {
+    state.showWarningMessage.mockResolvedValue(undefined);
+    await run('repodock.showRecent');
+    expect(lastExecute('workbench.action.reloadWindow')).toBeUndefined();
+  });
+
+  it('switches without a prompt once the window knows the setting', async () => {
+    state.unregisteredKeys.clear();
+    await run('repodock.showRecent');
+    expect(state.config.get('layout')).toBe('recent');
+    expect(state.showWarningMessage).not.toHaveBeenCalled();
+  });
+});
+
 describe('pinning', () => {
   it('pins without ever unpinning', async () => {
     // the menu only offers Pin on an unpinned row, but the contextValue it keys off can

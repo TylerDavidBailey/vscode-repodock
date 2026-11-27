@@ -62,12 +62,17 @@ export interface StubState {
    * for the settings `package.json` lists as restricted, and only for those.
    */
   workspaceTrusted: boolean;
+  /**
+   * Settings the window has no schema for, as after an in-place update that skipped the
+   * reload: `inspect` reports no default for them and `update` rejects them, as VS Code does.
+   */
+  unregisteredKeys: Set<string>;
   /** Command id to handler, populated by `commands.registerCommand`. */
   commands: Map<string, (...args: never[]) => unknown>;
   /** Context keys set through `executeCommand('setContext', key, value)`. */
   contextKeys: Map<string, unknown>;
   executeCommand: Mock<(command: string, ...args: unknown[]) => unknown>;
-  showWarningMessage: Mock<(message: string) => unknown>;
+  showWarningMessage: Mock<(message: string, ...items: string[]) => unknown>;
   showInformationMessage: Mock<(message: string) => unknown>;
   /** Resolves `window.showQuickPick`; set per test. Undefined models cancellation. */
   showQuickPick: Mock<(items: unknown, options?: unknown) => unknown>;
@@ -105,6 +110,14 @@ const RESTRICTED_KEYS = new Set(
   ),
 );
 
+/** Unprefixed setting key to its `package.json` default, which `inspect` reports. */
+const DEFAULTS = new Map(
+  Object.entries(manifest.contributes.configuration.properties).map(([key, schema]) => [
+    key.slice(CONFIG_SECTION.length + 1),
+    (schema as { default: unknown }).default,
+  ]),
+);
+
 /** Listener lists the `fire*` helpers dispatch to. */
 interface Listeners {
   config: ((e: { affectsConfiguration: (key: string) => boolean }) => unknown)[];
@@ -126,6 +139,7 @@ export function createStubState(): StubState {
     config: new Map(),
     workspaceConfig: new Map(),
     workspaceTrusted: true,
+    unregisteredKeys: new Set(),
     commands: new Map(),
     contextKeys: new Map(),
     executeCommand: vi.fn(),
@@ -151,6 +165,7 @@ export function createStubState(): StubState {
       state.config.clear();
       state.workspaceConfig.clear();
       state.workspaceTrusted = true;
+      state.unregisteredKeys.clear();
       state.commands.clear();
       state.contextKeys.clear();
       terminals.length = 0;
@@ -414,10 +429,18 @@ export function createVscodeStub(state: StubState = stubState) {
         },
         inspect: (key: string) => ({
           key,
+          defaultValue: state.unregisteredKeys.has(key) ? undefined : DEFAULTS.get(key),
           globalValue: state.config.get(key),
           workspaceValue: state.workspaceConfig.get(key),
         }),
         update: (key: string, value: unknown, target?: number) => {
+          if (state.unregisteredKeys.has(key)) {
+            return Promise.reject(
+              new Error(
+                `Unable to write to User Settings because ${CONFIG_SECTION}.${key} is not a registered configuration.`,
+              ),
+            );
+          }
           const store = target === 2 ? state.workspaceConfig : state.config;
           if (value === undefined) {
             store.delete(key);

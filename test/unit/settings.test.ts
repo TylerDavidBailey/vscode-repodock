@@ -407,6 +407,30 @@ describe('setLayout', () => {
     expect(state.workspaceConfig.get('layout')).toBe('folders');
     expect(configStore.has('layout')).toBe(false);
   });
+
+  it('reports the write it made', async () => {
+    await expect(setLayout('recent')).resolves.toBe(true);
+  });
+
+  describe("in a window that kept an older version's settings schema", () => {
+    beforeEach(() => {
+      // updated from 1.2.0, which had no layout setting, then Restart Extensions
+      state.unregisteredKeys.add('layout');
+    });
+
+    it('writes nothing, rather than letting the editor reject the write', async () => {
+      await expect(setLayout('recent')).resolves.toBe(false);
+      expect(configStore.has('layout')).toBe(false);
+    });
+
+    it('is a state the stub models the way the editor does', async () => {
+      const vscode = await import('vscode');
+      const config = vscode.workspace.getConfiguration('repodock');
+      await expect(config.update('layout', 'recent')).rejects.toThrow(
+        'repodock.layout is not a registered configuration',
+      );
+    });
+  });
 });
 
 describe('unhideAllRepos', () => {
