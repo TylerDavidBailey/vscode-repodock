@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.3.0...v1.3.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* offer a window reload when an in-place update cannot save the layout yet ([#79](https://github.com/TylerDavidBailey/vscode-repodock/issues/79)) ([9fb5d0e](https://github.com/TylerDavidBailey/vscode-repodock/commit/9fb5d0e1f48b861aa3f881f12a462a64e46d64ad))
+
 ## [1.3.0](https://github.com/TylerDavidBailey/vscode-repodock/compare/v1.2.0...v1.3.0) (2026-11-26)
 
 
