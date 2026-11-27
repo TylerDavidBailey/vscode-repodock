@@ -261,11 +261,28 @@ export function unhideAllRepos(): Promise<void> {
 }
 
 /**
+ * Whether this window knows `key` from `package.json`. Updating the extension in place and
+ * choosing Restart Extensions runs the new code and menus, but the window keeps the old
+ * version's settings schema until it reloads, and `update` rejects a key the old version
+ * did not declare with "is not a registered configuration". Every setting RepoDock
+ * contributes has a default, and `inspect` reports none for a key the window does not know.
+ */
+function isRegistered(config: vscode.WorkspaceConfiguration, key: string): boolean {
+  return config.inspect(key)?.defaultValue !== undefined;
+}
+
+/**
  * Switches the view's layout, in the scope whose value is in effect (see `effectiveTarget`).
  * The write fires the configuration listener in `extension.ts`, which redraws the view and
  * updates the `repodock.layout` context key that picks the title-bar toggle.
+ *
+ * @returns false, having written nothing, when the window has not loaded the `layout`
+ * setting yet (see `isRegistered`). The setting is new in 1.3.0, so a window updated from
+ * an earlier version without a reload is in that state.
  */
-export async function setLayout(layout: Layout): Promise<void> {
+export async function setLayout(layout: Layout): Promise<boolean> {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  if (!isRegistered(config, 'layout')) return false;
   await config.update('layout', layout, effectiveTarget(config, 'layout'));
+  return true;
 }

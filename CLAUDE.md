@@ -121,6 +121,12 @@ Follows the TSDoc spec and the Microsoft TypeScript and VS Code coding guideline
   ssh command of a lazy fetch). Never add a git call that bypasses `runGit`, never start
   git by bare name, and add a case to `test/unit/git-hardening.test.ts` for any new
   subcommand.
+- Updating the extension in place and choosing Restart Extensions loads the new code and
+  menus but keeps the old version's settings schema until the window reloads, so writing a
+  setting the old version did not declare fails with "is not a registered configuration".
+  A writer for a newly added setting checks `isRegistered` in `settings.ts` first and offers
+  a reload, as `setLayout` does. Dev mode and the `editor-test` scenarios never reach this
+  state; only an update of an installed `.vsix` does.
 - Compare configured paths and user paths with `canonicalPathKey` after `expandPath`.
   Display paths with `tildify`.
 - TypeScript 6 requires an explicit `"types"` list in tsconfig, because automatic `@types`

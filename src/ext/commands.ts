@@ -9,6 +9,7 @@ import {
   expandPath,
   getConfig,
   hideRepo,
+  type Layout,
   removeDirectory,
   setLayout,
   tildify,
@@ -28,6 +29,23 @@ interface CommandDeps {
 
 function repoOf(element: TreeNode | undefined): RepoInfo | undefined {
   return element?.kind === 'repo' ? element.repo : undefined;
+}
+
+const RELOAD_WINDOW = 'Reload Window';
+
+/**
+ * Switches layout, or, in a window updated without a reload that cannot store the setting
+ * yet, offers the reload instead of the editor's "not a registered configuration" error.
+ */
+async function switchLayout(layout: Layout): Promise<void> {
+  if (await setLayout(layout)) return;
+  const choice = await vscode.window.showWarningMessage(
+    'RepoDock was updated. Reload the window to finish the update, then switch layouts.',
+    RELOAD_WINDOW,
+  );
+  if (choice === RELOAD_WINDOW) {
+    await vscode.commands.executeCommand('workbench.action.reloadWindow');
+  }
 }
 
 /**
@@ -105,8 +123,8 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
       }
     }),
     vscode.commands.registerCommand('repodock.refresh', () => refresh()),
-    vscode.commands.registerCommand('repodock.showFolders', () => setLayout('folders')),
-    vscode.commands.registerCommand('repodock.showRecent', () => setLayout('recent')),
+    vscode.commands.registerCommand('repodock.showFolders', () => switchLayout('folders')),
+    vscode.commands.registerCommand('repodock.showRecent', () => switchLayout('recent')),
     vscode.commands.registerCommand(
       'repodock.openInTerminal',
       withRepo((repo) => {
